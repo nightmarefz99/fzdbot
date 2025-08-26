@@ -1,3 +1,0 @@
-discord.py>=2.0
-mysql-connector-python<10.0,>=9.3
-python-dotenv>=1.0
