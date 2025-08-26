@@ -1,0 +1,2 @@
+[console_scripts]
+fzdbot = fzdbot.bot:main

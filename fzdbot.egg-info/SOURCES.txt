@@ -1,0 +1,13 @@
+LICENSE
+README.md
+pyproject.toml
+fzdbot/__init__.py
+fzdbot/bot.py
+fzdbot/formatters.py
+fzdbot/fzd_db.py
+fzdbot.egg-info/PKG-INFO
+fzdbot.egg-info/SOURCES.txt
+fzdbot.egg-info/dependency_links.txt
+fzdbot.egg-info/entry_points.txt
+fzdbot.egg-info/requires.txt
+fzdbot.egg-info/top_level.txt

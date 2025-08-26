@@ -4,6 +4,7 @@
 #    And add pagination to "/show", mostly for large events with a big scoreboard (i.e. GGP)
 
 import os
+from datetime import timezone
 
 # External required modules 
 from dotenv import load_dotenv
@@ -11,21 +12,22 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 
-# Local functions (NOTE: fzd_db requires mysql.connector)
-from fzd_db import connect_to_database
-from fzd_db import create_event
-from fzd_db import get_event_types
-from fzd_db import get_user_id
-from fzd_db import get_user_scores
-from fzd_db import submit_score
-from fzd_db import edit_score
-from fzd_db import check_for_active_event
-from fzd_db import add_new_user
-from fzd_db import modify_user_display_name
-from fzd_db import get_event_scoreboard
-from formatters import format_discord_timestamp
-from formatters import format_scoreboard_display_text
-from formatters import format_scoreboard_for_discord_embed
+# Local functions 
+from .fzd_db import connect_to_database
+from .fzd_db import create_event
+from .fzd_db import get_event_types
+from .fzd_db import get_user_id
+from .fzd_db import get_user_scores
+from .fzd_db import submit_score
+from .fzd_db import edit_score
+from .fzd_db import check_for_active_event
+from .fzd_db import add_new_user
+from .fzd_db import modify_user_display_name
+from .fzd_db import get_event_scoreboard
+# formatters.py
+from .formatters import format_discord_timestamp
+from .formatters import format_scoreboard_display_text
+from .formatters import format_scoreboard_for_discord_embed
 
 # LOAD INFO FROM .env FILE
 load_dotenv()
@@ -54,7 +56,7 @@ def main() -> None:
     # Establish database connection
     db_connect = connect_to_database()
     if not db_connect:
-        print("Bot cannot start without database connection."
+        print("Bot cannot start without database connection.")
         exit(1)
     
     # Get all event types from 'events' table
