@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "A Discord bot for tracking and displaying scores, integrated with a database"
 readme = "README.md"
 license = { file = "LICENSE" }
-authors = [{ name = "Nightmare", email = "" }]
+authors = [{ name = "Nightmare", email = "tromnick@yahoo.com" }]
 requires-python = ">=3.9"
 
 dependencies = [
