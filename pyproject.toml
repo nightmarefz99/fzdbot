@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fzdbot"
+version = "0.1.0"
+description = "A Discord bot for tracking and displaying scores, integrated with a database"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Nightmare", email = "" }]
+requires-python = ">=3.9"
+
+dependencies = [
+    "discord.py>=2.0",
+    "mysql-connector-python>=9.3,<10.0",
+    "python-dotenv>=1.0"
+]
+
+[project.scripts]
+fzdbot = "fzdbot.bot:main"
+
