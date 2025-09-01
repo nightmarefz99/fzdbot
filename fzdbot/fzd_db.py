@@ -205,8 +205,12 @@ def get_event_scoreboard(db, event_type=None):
     else:
         eventinfo=get_latest_event(db,event_id=event_type)
     cursor = db.cursor(dictionary=True)
-    cursor.execute(sql_getscoreboard, [eventinfo['id']]) 
 
+    # Check there's an event to display
+    if not eventinfo:
+        return None, None
+   
+    cursor.execute(sql_getscoreboard, [eventinfo['id']]) 
     allscores = cursor.fetchall() #[{'player': 'Angelo', 'score': Decimal('1140')}...]
  
     return eventinfo, allscores

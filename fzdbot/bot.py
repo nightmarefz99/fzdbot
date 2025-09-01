@@ -62,6 +62,8 @@ def main() -> None:
     
     # Get all event types from 'events' table
     recurring_events = get_event_types(db_connect)
+    print(recurring_events)
+    print(repr(recurring_events))
     
     # Define event choices for dropdown menus (used in /start_event and /show commands)
     event_choices=[ app_commands.Choice(name=e['name'], value=e['id']) for e in recurring_events ]
@@ -230,19 +232,26 @@ def main() -> None:
     @app_commands.choices(event_type=event_choices)
     async def showScoreboard(interaction: discord.Interaction, event_type: int = None):
         eventinfo, eventscoreslist = get_event_scoreboard(db_connect, event_type=event_type)
-        ranked_scoreboard = format_scoreboard_display_text(eventscoreslist)
-        eventdate = eventinfo['utc_start_dt'].replace(tzinfo=timezone.utc)
+        if eventinfo and eventscoreslist:
+            ranked_scoreboard = format_scoreboard_display_text(eventscoreslist)
+            eventdate = eventinfo['utc_start_dt'].replace(tzinfo=timezone.utc)
 
-        scoreboard = discord.Embed(title=eventinfo['name'], description=f"*Played on {format_discord_timestamp(eventdate)}*")
-        scoreboard.set_thumbnail(url="https://media.discordapp.net/attachments/1399501477608951933/1400792457007861800/Supernova_Server_Icon.png?ex=689c6da3&is=689b1c23&hm=68b8d8790d30689fbad0dfb9341c78921ecf9afecc5919880c81680329c32644&=&format=webp&quality=lossless&width=1024&height=1024") 
+            scoreboard = discord.Embed(title=eventinfo['name'], description=f"*Played on {format_discord_timestamp(eventdate)}*")
+            scoreboard.set_thumbnail(url="https://media.discordapp.net/attachments/1399501477608951933/1400792457007861800/Supernova_Server_Icon.png?ex=689c6da3&is=689b1c23&hm=68b8d8790d30689fbad0dfb9341c78921ecf9afecc5919880c81680329c32644&=&format=webp&quality=lossless&width=1024&height=1024") 
         
-        fields_display_text = format_scoreboard_for_discord_embed(ranked_scoreboard, max_num_lines=10)
-        #for lin in fields_display_text:
-        #    print(lin)
-        #print(len(fields_display_text))
-        for i, block in enumerate(fields_display_text, start=1):
-            scoreboard.add_field(name="", value=block, inline=False)
-        await interaction.response.send_message(embed=scoreboard)   
+            fields_display_text = format_scoreboard_for_discord_embed(ranked_scoreboard, max_num_lines=10)
+            #for lin in fields_display_text:
+            #    print(lin)
+            #print(len(fields_display_text))
+            for i, block in enumerate(fields_display_text, start=1):
+                scoreboard.add_field(name="", value=block, inline=False)
+            await interaction.response.send_message(embed=scoreboard)   
+        else:
+            event_name = [e['name'] for e in recurring_events if e['id'] == event_type]
+            await interaction.response.send_message(
+                  f"⚠️  No results found for event_type '{event_name[0]}'! If this is unexpected behavior contact a mod!",
+                  ephemeral=True
+                  )
 
     # =============================================================================================================
     #   Run the bot!
