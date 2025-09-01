@@ -34,6 +34,15 @@ python -m venv venv
 venv\Scripts\activate
 ```
 
+Note after creating you only need to run the 2nd line to activate it (source venv/bin/activate or venv\Scripts\activate)
+Optionally you can add it to your config file (e.g. ~/.bashrc) to automatically activate the virtual environment
+
+```bash
+# in ~/.bashrc or ~/.zshrc
+cd ~/path/to/fzdbot
+source venv/bin/activate
+```
+
 ---
 
 ### 3️⃣ Install dependencies
