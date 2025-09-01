@@ -13,21 +13,22 @@ from discord.ext import commands
 from discord import app_commands
 
 # Local functions 
-from .fzd_db import connect_to_database
-from .fzd_db import create_event
-from .fzd_db import get_event_types
-from .fzd_db import get_user_id
-from .fzd_db import get_user_scores
-from .fzd_db import submit_score
-from .fzd_db import edit_score
-from .fzd_db import check_for_active_event
-from .fzd_db import add_new_user
-from .fzd_db import modify_user_display_name
-from .fzd_db import get_event_scoreboard
+from fzdbot.fzd_db import connect_to_database
+from fzdbot.fzd_db import create_event
+from fzdbot.fzd_db import get_event_types
+from fzdbot.fzd_db import get_user_id
+from fzdbot.fzd_db import get_user_scores
+from fzdbot.fzd_db import submit_score
+from fzdbot.fzd_db import edit_score
+from fzdbot.fzd_db import delete_score
+from fzdbot.fzd_db import check_for_active_event
+from fzdbot.fzd_db import add_new_user
+from fzdbot.fzd_db import modify_user_display_name
+from fzdbot.fzd_db import get_event_scoreboard
 # formatters.py
-from .formatters import format_discord_timestamp
-from .formatters import format_scoreboard_display_text
-from .formatters import format_scoreboard_for_discord_embed
+from fzdbot.formatters import format_discord_timestamp
+from fzdbot.formatters import format_scoreboard_display_text
+from fzdbot.formatters import format_scoreboard_for_discord_embed
 
 # LOAD INFO FROM .env FILE
 load_dotenv()
@@ -141,10 +142,10 @@ def main() -> None:
     # This command queries the database for scores of a current event to edit for a user
     @client.tree.command(name="edit_score", description="Edit a submitted score, set it to new_score in FZD scoreboard database", guild=GUILD_ID)
     async def editScore(interaction: discord.Interaction, old_score: str, new_score: str):
-        valid_options, ids = get_user_scores(db_connect, interaction.user.name)
+        valid_options = get_user_scores(db_connect, interaction.user.name)
         score, idchoice = old_score.split("|")
-        #print(f"User chose {score} with id {idchoice}")
-        if score not in valid_options:
+        score_in_opts = any(d.get('score') == score for d in valid_options)
+        if not score_in_opts:
             await interaction.response.send_message(f"❌ '{score}' is not a valid choice for you. Please select one of the options shown: {valid_options}", ephemeral=True) 
         elif score == "NO CURRENT EVENT":
             await interaction.response.send_message(f"❌  No current event active, can't edit scores! If you need help, contact an FZD mod", ephemeral=True)
@@ -174,7 +175,7 @@ def main() -> None:
             self.confirmed = True
             self.stop() # Stop listening for further interactions
             # Execute the action here
-            edit_score(db_connect, [self.idchoice], delete=True)
+            delete_score(db_connect, [self.idchoice])
             await interaction.response.edit_message(content=f"Score deleted.", view=None) # Remove buttons
             await interaction.followup.send(content=f"✅ User {interaction.user.name} has successfully deleted '{self.score}' from their submitted scores", ephemeral=False)
  
@@ -192,10 +193,10 @@ def main() -> None:
     # This command queries the database for scores of a current event to delete for a user
     @client.tree.command(name="delete_score", description="Delete a score you have submitted during an ongoing event", guild=GUILD_ID)
     async def deleteScore(interaction: discord.Interaction, score_to_delete: str):
-        valid_options, ids = get_user_scores(db_connect, interaction.user.name)
+        valid_options = get_user_scores(db_connect, interaction.user.name)
         score, idchoice = score_to_delete.split("|")
-        print(f"User chose {score} with id {idchoice}")
-        if score not in valid_options:
+        score_in_opts = any(d.get('score') == score for d in valid_options)
+        if not score_in_opts:
             await interaction.response.send_message(f"❌ '{score}' is not a valid choice for you. Please select one of the options shown: {valid_options}", ephemeral=True)
         elif score == "NO CURRENT EVENT":
             await interaction.response.send_message(f"❌  No current event active, can't edit scores! If you need help, contact an FZD mod", ephemeral=True)
@@ -213,10 +214,10 @@ def main() -> None:
     @editScore.autocomplete("old_score")
     @deleteScore.autocomplete("score_to_delete")
     async def option_autocomplete(interaction: discord.Interaction, current: str):
-        user_scores, ids_scores = get_user_scores(db_connect, interaction.user.name)
-         
+        user_scores = get_user_scores(db_connect, interaction.user.name)
+  
         # Filter based on what the user is currently typing
-        choices = [(opt, idopt) for opt, idopt in zip(user_scores, ids_scores) if current.lower() in opt.lower()]
+        choices = [(opt['score'], opt['id']) for opt in user_scores if current.lower() in opt['score'].lower()]
         # Return up to 25 results (discord limit)
         return [app_commands.Choice(name=opt, value=f"{opt}|{idopt}") for opt, idopt in choices[:25]] 
  
@@ -232,7 +233,7 @@ def main() -> None:
         ranked_scoreboard = format_scoreboard_display_text(eventscoreslist)
         eventdate = eventinfo['utc_start_dt'].replace(tzinfo=timezone.utc)
 
-        scoreboard = discord.Embed(title=eventinfo['display_name'], description=f"*Played on {format_discord_timestamp(eventdate)}*")
+        scoreboard = discord.Embed(title=eventinfo['name'], description=f"*Played on {format_discord_timestamp(eventdate)}*")
         scoreboard.set_thumbnail(url="https://media.discordapp.net/attachments/1399501477608951933/1400792457007861800/Supernova_Server_Icon.png?ex=689c6da3&is=689b1c23&hm=68b8d8790d30689fbad0dfb9341c78921ecf9afecc5919880c81680329c32644&=&format=webp&quality=lossless&width=1024&height=1024") 
         
         fields_display_text = format_scoreboard_for_discord_embed(ranked_scoreboard, max_num_lines=10)

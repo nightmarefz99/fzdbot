@@ -32,45 +32,31 @@ def get_event_types(db):
     
     return eventtypes #[{'id': 7, 'name': 'Weekly Classic Mini'} . . .
 
-def db_get_users(db):
-    """ Returns dictionary of users. Each user entry has following keys:
-        id - internal (database) integer id
-        discord_display_name - Name used in discord (i.e. on scoreboard)
-        tag - TBD
-        discord_user_id - TBD 
-        verified - TBD
-    """
-    # MySQL cursor object to process data returned by SQL query one row at a time
-    cursor = db.cursor(dictionary=True) # Pass back results as dict
-    cursor.execute("SELECT * FROM users;")
-    users_db = cursor.fetchall()
-    return users_db
-
 def get_user_id(db, discord_id: str):
     """ Given a discord user id (discord_id), returns the database
         id of that user
     """
-    allusers = db_get_users(db)
-    db_user_id = [d['id'] for d in allusers if d['discord_user_id'] == discord_id]
-    if not db_user_id:
-        user = None
+    cursor = db.cursor(dictionary=True) 
+    sql_getuser = "SELECT id from users WHERE discord_user_id = %s"
+    cursor.execute(sql_getuser, [discord_id])
+    user = cursor.fetchone()
+    if user:
+        return user['id']
     else:
-        user = db_user_id[0]
-    return user
+        return None
 
 def add_new_user(db, discord_username, display_name=None) -> None:
     """ Adds new user to the database
     """ 
     cursor = db.cursor(dictionary=True)
     
-    # FOR NOW: database requires "discord_display_name" to be set, so set it to the discord_user_id
-    # so it does not interfere with other imported results
-    sql_newuser="INSERT INTO users (tag, discord_user_id, discord_display_name) VALUES (%s, %s, %s);"
+    # Assuming "discord_display_name" isn't required 
+    sql_newuser="INSERT INTO users (tag, discord_user_id) VALUES (%s, %s);"
 
     if display_name is None: # Defaults to user's server display name 
         display_name = discord_username.nick[0:10]
 
-    cursor.execute(sql_newuser, (display_name, discord_username.name, discord_username.name))
+    cursor.execute(sql_newuser, (display_name, discord_username.name)) #, discord_username.name))
     db.commit()
 
 def modify_user_display_name(db, db_user_id, display_name) -> None:
@@ -88,9 +74,10 @@ def create_event(db, event) -> None:
     now = datetime.now(timezone.utc) #now.strftime('%Y-%m-%d %H:%M:%S')
     endtime =  now + timedelta(hours=2)
     tformat = '%Y-%m-%d %H:%M:%S'
+    
     cursor = db.cursor(dictionary=True)
-    sql_addevent = "INSERT INTO events_scheduled (event_id, display_name, utc_start_dt, utc_end_dt) VALUES (%s, %s, %s, %s);"
-    cursor.execute(sql_addevent, (event['id'], event['name'], now.strftime(tformat), endtime.strftime(tformat)) )
+    sql_addevent = "INSERT INTO events_scheduled (event_id, utc_start_dt, utc_end_dt) VALUES (%s, %s, %s);"
+    cursor.execute(sql_addevent, (event['id'], now.strftime(tformat), endtime.strftime(tformat)) )
     db.commit()
 
 def check_for_active_event(db):
@@ -101,15 +88,14 @@ def check_for_active_event(db):
 
     cursor = db.cursor(dictionary=True)
 
-    sql_getevent="""SELECT id, display_name, utc_start_dt, utc_end_dt FROM events_scheduled 
-                    WHERE utc_start_dt = 
-                      (SELECT MAX(utc_start_dt) FROM events_scheduled 
-                       WHERE UTC_TIMESTAMP() > utc_start_dt AND UTC_TIMESTAMP() < utc_end_dt)"""
+    sql_getevent="""SELECT es.id, e.name, es.utc_start_dt, es.utc_end_dt 
+                    FROM events_scheduled es
+                    JOIN events e ON e.id = es.event_id
+                    WHERE UTC_TIMESTAMP() BETWEEN utc_start_dt AND utc_end_dt;"""
     cursor.execute(sql_getevent)
     eventmatch = cursor.fetchone()
-
     if eventmatch:
-        active_event['name'] = eventmatch['display_name']
+        active_event['name'] = eventmatch['name']
         active_event['id']   = eventmatch['id']
 
     return active_event
@@ -124,47 +110,54 @@ def submit_score(db, dataentry) -> None:
     cursor.execute(sql_newrow, dataentry)
     db.commit()
 
-def edit_score(db, dataentry, delete=False) -> None:
+def edit_score(db, dataentry) -> None:
     """ Executes sql query command to insert data to database
         db = database connection object
         dataentry = [ newscore, id ] for modifying score, 
-                    [ id ] for deleting score
                     all integer values
         delete = Optional bool to delete score
     """
-    #print(f"dataentry = {dataentry}")
     cursor = db.cursor(dictionary=True)
     sql_updaterow="UPDATE event_result_points SET score = %s WHERE id = %s;" 
-    sql_deleterow="DELETE FROM event_result_points WHERE id = %s;" 
-    if delete:
-        cursor.execute(sql_deleterow, dataentry)
-    else:
-        cursor.execute(sql_updaterow, dataentry)
+    cursor.execute(sql_updaterow, dataentry)
     
     db.commit()
 
-def get_user_scores(db, user_name):
+def delete_score(db, dataentry) -> None:
+    """ Executes sql query command to insert data to database
+        db = database connection object
+        dataentry = [ id ] for deleting score
+                    all integer values
+        delete = Optional bool to delete score
+    """
+    cursor = db.cursor(dictionary=True)
+    sql_deleterow="DELETE FROM event_result_points WHERE id = %s;"
+    cursor.execute(sql_deleterow, dataentry)
+
+    db.commit()
+
+def get_user_scores(db, user_name) -> list[dict[str,str]]:
     """ Query the database for scores of active event of a given user
         Returns scoresmatch (list[str]) and idmatch (list[str])
     """
     active_event =  check_for_active_event(db)
     if (active_event['name'] == "NULL"):
-        return ["NO CURRENT EVENT"], ['-999']
+        return [{'score':"NO CURRENT EVENT", 'id':'-999'}]
     db_user_id = get_user_id(db, user_name)
     
     cursor = db.cursor(dictionary=True)
-    sql_getscores = """SELECT score, id FROM event_result_points 
+    sql_getscores = """SELECT CAST(score AS CHAR) AS score, 
+                              CAST(id AS CHAR) AS id
+                       FROM event_result_points 
                        WHERE user_id = %s AND scheduled_event_id = %s 
                        ORDER BY id ASC;"""
     cursor.execute(sql_getscores, (db_user_id, active_event['id']))
-    scoresdict = cursor.fetchall()   
+    scoresdict = cursor.fetchall()  #[{'score': 667, 'id': 472}, ...]
     
-    scoresmatch = [str(s['score']) for s in scoresdict if 'score' in s]
-    idmatch = [str(s['id']) for s in scoresdict if 'id' in s]
-    if not scoresmatch:
-        return ["NO USER SCORES FOUND"], ['-999']
+    if not scoresdict:
+        return [{'score':"NO USER SCORES FOUND", 'id':'-999'}]
 
-    return scoresmatch, idmatch
+    return scoresdict
 
 def get_latest_event(db, event_id=None):
     """ Get most recent event, return a dict containing the unique id, 
@@ -172,23 +165,19 @@ def get_latest_event(db, event_id=None):
         OPTIONAL: event_id to find latest of a specific event
     """
     cursor = db.cursor(dictionary=True)
+    sql_getevent="""SELECT es.id, e.name, es.utc_start_dt, es.utc_end_dt 
+                    FROM events_scheduled es
+                    JOIN events e ON e.id = es.event_id
+                    WHERE utc_start_dt =
+                        (SELECT MAX(utc_start_dt) FROM events_scheduled 
+                         WHERE utc_start_dt < UTC_TIMESTAMP())"""
     if event_id is None:
-        sql_getevent="""SELECT id, display_name, utc_start_dt 
-                        FROM events_scheduled 
-                        WHERE utc_start_dt = 
-                          (SELECT MAX(utc_start_dt) FROM events_scheduled 
-                           WHERE utc_start_dt < UTC_TIMESTAMP())"""
         cursor.execute(sql_getevent)
     else:
-        sql_getevent="""SELECT id, display_name, utc_start_dt 
-                        FROM events_scheduled 
-                        WHERE utc_start_dt = 
-                          (SELECT MAX(utc_start_dt) FROM events_scheduled 
-                           WHERE utc_start_dt < UTC_TIMESTAMP() AND event_id = %s)"""
+        sql_getevent = sql_getevent.replace("())", "() AND event_id = %s)")
         cursor.execute(sql_getevent, [event_id])
     
     selectedevent = cursor.fetchone()
-    print(f"The selectedevent: {selectedevent}")
     
     return  selectedevent
 
