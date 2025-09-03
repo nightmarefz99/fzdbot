@@ -1,3 +1,9 @@
+# This file contains database-related functions
+# including establishing a connection,
+# inserting new rows into different tables,
+# updating or deleting deleting,
+# and querying the tables for info on users, events, scores, etc.
+
 import os
 import mysql.connector
 from datetime import datetime, timedelta, timezone
@@ -16,6 +22,11 @@ def connect_to_database():
     try:
         db = mysql.connector.connect(**config)
         if db.is_connected():
+            # Ensure that any changes committed by other db connections are
+            # read in with each new query (e.g., if an event is started, then 
+            # Scoring commands will be able to 'see' the newly-committed event in the db)
+            cursor = db.cursor()
+            cursor.execute("SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED")
             print("✅ Connected to database")
             return db
     except mysql.connector.Error as err:
@@ -26,7 +37,7 @@ def get_event_types(db):
     """ Get event types and ids of recurring events from 'events' table
     """ 
     cursor = db.cursor(dictionary=True) # Pass back results as dict
-    sql_gettypes = "SELECT id, name FROM events WHERE recurring = 1"
+    sql_gettypes = "SELECT id, name FROM events" # WHERE recurring = 1"
     cursor.execute(sql_gettypes)
     eventtypes = cursor.fetchall()
     
@@ -115,7 +126,6 @@ def edit_score(db, dataentry) -> None:
         db = database connection object
         dataentry = [ newscore, id ] for modifying score, 
                     all integer values
-        delete = Optional bool to delete score
     """
     cursor = db.cursor(dictionary=True)
     sql_updaterow="UPDATE event_result_points SET score = %s WHERE id = %s;" 
@@ -128,7 +138,6 @@ def delete_score(db, dataentry) -> None:
         db = database connection object
         dataentry = [ id ] for deleting score
                     all integer values
-        delete = Optional bool to delete score
     """
     cursor = db.cursor(dictionary=True)
     sql_deleterow="DELETE FROM event_result_points WHERE id = %s;"
@@ -138,7 +147,7 @@ def delete_score(db, dataentry) -> None:
 
 def get_user_scores(db, user_name) -> list[dict[str,str]]:
     """ Query the database for scores of active event of a given user
-        Returns scoresmatch (list[str]) and idmatch (list[str])
+        Returns all values as strings for autocomplete bot feature
     """
     active_event =  check_for_active_event(db)
     if (active_event['name'] == "NULL"):
@@ -203,7 +212,7 @@ def get_event_scoreboard(db, event_type=None):
     if event_type is None:
         eventinfo=get_latest_event(db)
     else:
-        eventinfo=get_latest_event(db,event_id=event_type)
+        eventinfo=get_latest_event(db,event_id=int(event_type))
     cursor = db.cursor(dictionary=True)
 
     # Check there's an event to display
@@ -212,6 +221,5 @@ def get_event_scoreboard(db, event_type=None):
    
     cursor.execute(sql_getscoreboard, [eventinfo['id']]) 
     allscores = cursor.fetchall() #[{'player': 'Angelo', 'score': Decimal('1140')}...]
- 
     return eventinfo, allscores
 

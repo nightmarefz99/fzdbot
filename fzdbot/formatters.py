@@ -1,3 +1,5 @@
+# This file contains format functions for displaying results from past events into discord,
+# mainly used in the "/show" command as of right now
 from datetime import datetime, timedelta, timezone
 
 def format_discord_timestamp(dt, inline=False) -> str:
