@@ -27,10 +27,10 @@ class Scoreboard(commands.Cog):
 
         return event_choices[:25] # Discord only accepts max 25 autocomplete results
     
-    @app_commands.command(name="show", description="Show most current FZD event scoreboard") #,  guild=GUILD_ID)
+    @app_commands.command(name="fzd_show", description="Show most current FZD event scoreboard") #,  guild=GUILD_ID)
     async def showScoreboard(self, interaction: discord.Interaction, event_type: str = None):
         eventinfo, eventscoreslist = get_event_scoreboard(self.db, event_type=event_type)
-        if not eventinfo:
+        if not eventinfo: 
             if event_type:
                 event_name = [e['name'] for e in self.recurring_events if e['id'] == int(event_type)]
                 await interaction.response.send_message(
@@ -42,21 +42,18 @@ class Scoreboard(commands.Cog):
                       f"❌ ERROR! Something unexpected went wrong, contact an FZD mod to help!",
                       ephemeral=True
                       )
-        elif not eventscoreslist: # In case results are not in the db yet 
-            await interaction.response.send_message(
-                  f"⚠️  No results available to show yet for  '{eventinfo['name']}'!!! Please be patient as we work to import them to the database",
-                  ephemeral=True
-                  )
         else:
-            ranked_scoreboard = format_scoreboard_display_text(eventscoreslist)
             eventdate = eventinfo['utc_start_dt'].replace(tzinfo=timezone.utc)
-
             scoreboard = discord.Embed(title=eventinfo['name'], description=f"*Played on {format_discord_timestamp(eventdate)}*")
             scoreboard.set_thumbnail(url="https://media.discordapp.net/attachments/1399501477608951933/1400792457007861800/Supernova_Server_Icon.png?ex=689c6da3&is=689b1c23&hm=68b8d8790d30689fbad0dfb9341c78921ecf9afecc5919880c81680329c32644&=&format=webp&quality=lossless&width=1024&height=1024")
+            if not eventscoreslist:
+                scoreboard.add_field(name="", value="NO RESULTS TO DISPLAY YET", inline=False)
+            else:
+                ranked_scoreboard = format_scoreboard_display_text(eventscoreslist)
+                fields_display_text = format_scoreboard_for_discord_embed(ranked_scoreboard, max_num_lines=10)
+                for i, block in enumerate(fields_display_text, start=1):
+                    scoreboard.add_field(name="", value=block, inline=False)
 
-            fields_display_text = format_scoreboard_for_discord_embed(ranked_scoreboard, max_num_lines=10)
-            for i, block in enumerate(fields_display_text, start=1):
-                scoreboard.add_field(name="", value=block, inline=False)
             await interaction.response.send_message(embed=scoreboard)
     
     async def cog_load(self):

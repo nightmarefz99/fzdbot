@@ -35,21 +35,21 @@ def format_scoreboard_display_text(allscores) -> list[str]:
         if score != last_score:
             rank = iscore + 1
     
-        emoji=""
+        rankdisplay=str(rank)+"\\."
         if rank == 1:
-            emoji=":trophy: "
+            rankdisplay="<:1st:1201576405339754546> " #emoji=":trophy: "
         elif rank == 2:
-            emoji=":second_place: "
+            rankdisplay="<:2nd:1201576409638903858> " #":second_place: "
         elif rank == 3:
-            emoji=":third_place: "
+            rankdisplay="<:3rd:1201576412444905653> " #":third_place: "
        
         if not isBelowPodium and rank > 3:
-            scoreboard.append("===================================")
+            scoreboard.append("======================")
             isBelowPodium = True
         
         # If we don't escape the dot ("\\.") discord might see the rank as markdown text 
         # And weird behavior could happen as a result
-        scoreboard.append(f"{emoji}{rank}\\. **{player}** -- {score} pts")
+        scoreboard.append(f"{rankdisplay} **{player}** -- {score} pts")
         last_score = score
 
     return scoreboard

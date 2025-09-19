@@ -27,25 +27,44 @@ class Scoring(commands.Cog):
     # ============================================================================================================= 
 
     # Add a score to an event
-    @app_commands.command(name="add_score", description="Add score to FZD scoreboard database") #, guild=GUILD_ID)
+    @app_commands.command(name="fzd_add_score", description="Add score to FZD scoreboard database") #, guild=GUILD_ID)
     @app_commands.describe(score="Enter an integer value for the score during an event")
-    async def add_score(self, interaction: discord.Interaction, score: int):
-        if score < 0:
-            await interaction.response.send_message(f"⚠️  Please enter a positive integer! ")
-        else:
+    async def add_score(self, interaction: discord.Interaction, score: str):
+        maxscore = 1000000 # arbitrarily set for now
+        try:
+            if int(score) < 0:
+                raise ValueError(f"score can't be a negative integer {interaction.user}") 
+            elif int(score) > maxscore:
+                raise OverflowError(f"score entered too large! {interaction.user}")
+    
+            # Get user id first, or add user if not registered in database
             db_user_id = get_user_id(self.db, interaction.user.name)
             if db_user_id is None:
                 add_new_user(self.db, interaction.user, display_name=interaction.user.nick[0:10])
                 db_user_id = get_user_id(self.db, interaction.user.name)
+                if db_user_id is None:
+                    raise TypeError(f"Could not add new user {interaction.user}")
+            
+            # check an event is active before adding data
             current_event = check_for_active_event(self.db)
-            if (current_event['name'] != "NULL"):
-                user_data = [current_event['id'], db_user_id, score] 
-                submit_score(self.db, user_data)
-                await interaction.response.send_message(
-                      f"✅ User {interaction.user} has entered a score of {score} to {current_event['name']}"
-                      )
+            if (current_event['name'] == "NULL"):
+                await interaction.response.send_message(f"⚠️  Warning: No event is currently active, score was not added!  ", ephemeral=True)
             else: 
-                await interaction.response.send_message(f"❌ ERROR! No event is active, score was not added!  ")
+                user_data = [current_event['id'], db_user_id, int(score)] 
+                submit_score(self.db, user_data) #interaction.user
+                await interaction.response.send_message(f"✅ User {interaction.user} has entered a score of {score} to {current_event['name']}") #, ephemeral=True)
+                print(f"✅ User {interaction.user.nick} has entered a score of {score} to {current_event['name']}")
+
+        except ValueError as ve: # should catch negative numbers and any errors with int(score) if score is not a base 10 integer
+            await interaction.response.send_message(f"❌ ERROR! 'score' must be entered as a positive integer!  ", ephemeral=True) 
+        except OverflowError as oe:
+            await interaction.response.send_message(f"❌ ERROR! 'score' should not be larger tnan {maxscore}. Please be nice to Nightmare's bot.", ephemeral=True) 
+        except TypeError as te:
+            await interaction.response.send_message(f"❌ ERROR! Could not add you to the database. Try the '/fzd_register' command, or contact FZD staff for help.", ephemeral=True) 
+        except Exception as e:
+            await interaction.response.send_message(f"❌ ERROR! Something went wrong, contact FZD staff for help! ", ephemeral=True)
+            print(f"Exception in add_score encountered! {e}")
+
 
     # ------------------------------------------------------------------
     # Autocomplete handler for editScore and deleteScore (same for both)
@@ -63,7 +82,7 @@ class Scoring(commands.Cog):
     # ============================================================================================================= 
     
     # This command queries the database for scores of a current event to edit for a user
-    @app_commands.command(name="edit_score", description="Edit a submitted score, set it to new_score in FZD scoreboard database")
+    @app_commands.command(name="fzd_edit_score", description="Edit a submitted score, set it to new_score in FZD scoreboard database")
     async def editScore(self, interaction: discord.Interaction, old_score: str, new_score: str):
         #  old_score is returned packed as "<score>|<id>" when a proper option is selected
         valid_options = get_user_scores(self.db, interaction.user.name)
@@ -75,12 +94,12 @@ class Scoring(commands.Cog):
 
             if score == "NO CURRENT EVENT":
                 await interaction.response.send_message(
-                      f"❌  No current event active, can't edit scores! If you need help, contact an FZD mod", 
+                      f"⚠️   No current event active, can't edit scores! If you need help, contact an FZD mod", 
                       ephemeral=True
                       )
             elif score == "NO USER SCORES FOUND":
                 await interaction.response.send_message(
-                      f"❌  No submitted scores found for user {interaction.user.name}! If you need help, contact an FZD mod", 
+                      f"⚠️   No submitted scores found for user {interaction.user.name}! If you need help, contact an FZD mod", 
                       ephemeral=True
                       )
             else:    
@@ -103,7 +122,7 @@ class Scoring(commands.Cog):
     # ============================================================================================================= 
     
     # This command queries the database for scores of a current event to delete for a user
-    @app_commands.command(name="delete_score", description="Delete a score you have submitted during an ongoing event")
+    @app_commands.command(name="fzd_delete_score", description="Delete a score you have submitted during an ongoing event")
     async def deleteScore(self, interaction: discord.Interaction, score_to_delete: str):
         #  score_to_delete is returned packed as "<score>|<id>" when a proper option is selected
         valid_options = get_user_scores(self.db, interaction.user.name)
@@ -115,12 +134,12 @@ class Scoring(commands.Cog):
 
             if score == "NO CURRENT EVENT":
                 await interaction.response.send_message(
-                      f"❌  No current event active, can't edit scores! If you need help, contact an FZD mod",
+                      f"⚠️   No current event active, can't edit scores! If you need help, contact an FZD mod",
                       ephemeral=True
                       )
             elif score == "NO USER SCORES FOUND":
                 await interaction.response.send_message(
-                      f"❌  No submitted scores found for user {interaction.user.name}! If you need help, contact an FZD mod",
+                      f"⚠️   No submitted scores found for user {interaction.user.name}! If you need help, contact an FZD mod",
                       ephemeral=True
                       )
             else:        

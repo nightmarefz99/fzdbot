@@ -56,6 +56,14 @@ def get_user_id(db, discord_id: str):
     else:
         return None
 
+#def _check_user_tag(db, display_name)
+#    cursor = db.cursor(dictionary=True)
+#    sql = "SELECT COUNT(1) FROM users WHERE unique_key = %s;"
+#    cursor.execute(sql, (display_name) )
+#    tag_exists = cursor.fetchone()
+#     
+#    return tag_exists
+
 def add_new_user(db, discord_username, display_name=None) -> None:
     """ Adds new user to the database
     """ 
@@ -79,11 +87,12 @@ def modify_user_display_name(db, db_user_id, display_name) -> None:
     cursor.execute(sql_modifyuser, (display_name, db_user_id))
     db.commit()
 
-def create_event(db, event) -> None:
+def create_event(db, event, duration: int = 2) -> None:
     """ Inserts new event into the 'events_scheduled' database
+        duration is optional variable to set how long the event window is (2 hours by default)
     """
     now = datetime.now(timezone.utc) #now.strftime('%Y-%m-%d %H:%M:%S')
-    endtime =  now + timedelta(hours=2)
+    endtime =  now + timedelta(hours=duration)
     tformat = '%Y-%m-%d %H:%M:%S'
     
     cursor = db.cursor(dictionary=True)
@@ -91,19 +100,19 @@ def create_event(db, event) -> None:
     cursor.execute(sql_addevent, (event['id'], now.strftime(tformat), endtime.strftime(tformat)) )
     db.commit()
 
-def check_for_active_event(db):
+def check_for_active_event(db, hours_from_now: int = 0):
     """ Checks database event times start and end times to see if
         event is active right now, returns dict with name and id
     """
     active_event = {'name':"NULL",'id':0} # Assume no match
 
     cursor = db.cursor(dictionary=True)
-
     sql_getevent="""SELECT es.id, e.name, es.utc_start_dt, es.utc_end_dt 
                     FROM events_scheduled es
                     JOIN events e ON e.id = es.event_id
-                    WHERE UTC_TIMESTAMP() BETWEEN utc_start_dt AND utc_end_dt;"""
-    cursor.execute(sql_getevent)
+                    WHERE DATE_ADD(UTC_TIMESTAMP(), INTERVAL %s HOUR) 
+                          BETWEEN utc_start_dt AND utc_end_dt;"""
+    cursor.execute(sql_getevent, (hours_from_now,) )
     eventmatch = cursor.fetchone()
     if eventmatch:
         active_event['name'] = eventmatch['name']
