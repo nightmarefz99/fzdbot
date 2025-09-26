@@ -7,7 +7,7 @@ from discord.ext import commands
 from discord import app_commands
 import mysql.connector
 
-from fzdbot.fzd_db import connect_to_database
+from fzdbot.fzd_db import get_db_connection #connect_to_database
 from fzdbot.fzd_db import get_event_types
 from fzdbot.fzd_db import add_new_user
 from fzdbot.fzd_db import get_user_id
@@ -18,8 +18,8 @@ from fzdbot.fzd_db import create_event
 class Modify_Events_Users(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.db = connect_to_database()
-        self.recurring_events = get_event_types(self.db)
+        with get_db_connection() as db:
+            self.recurring_events = get_event_types(db)
 
     async def event_type_autocomplete(self, interaction: discord.Interaction,
                                       current: str) -> list[app_commands.Choice[str]]:
@@ -39,26 +39,27 @@ class Modify_Events_Users(commands.Cog):
             if not event_name: # in the rare case user inputs an integer 'event', and above line returns empty list
                 raise IndexError("chosen event not part of list")
 
-            # Check every hour in the proposed new event for possible overlap with database events
-            for hour_to_check in range(0,duration+1):
-                match_event = check_for_active_event(self.db, hours_from_now=hour_to_check)
-                if (match_event['name'] != "NULL"):
-                    message=f"another event is currently running -- {match_event['name']}"
-                    if hour_to_check > 0:
-                        message=f"another event will start within the next {duration} hours -- {match_event['name']}" 
-                    await interaction.response.send_message(f"⚠️  Warning: Could not start event, {message}", ephemeral=True)
-                    return
+            with get_db_connection() as db:
+                # Check every hour in the proposed new event for possible overlap with database events
+                for hour_to_check in range(0,duration+1):
+                    match_event = check_for_active_event(db, hours_from_now=hour_to_check)
+                    if (match_event['name'] != "NULL"):
+                        message=f"another event is currently running -- {match_event['name']}"
+                        if hour_to_check > 0:
+                            message=f"another event will start within the next {duration} hours -- {match_event['name']}" 
+                        await interaction.response.send_message(f"⚠️  Warning: Could not start event, {message}", ephemeral=True)
+                        return
   
-            # Event is created here
-            current_event = match_event
-            current_event['name'] = event_name[0]
-            current_event['id'] = int(event)
-            create_event(self.db, current_event, duration=duration)  # default duration is 2 hours
-            await interaction.response.send_message(f"✅ FZD event {event_name[0]} successfully started!")
-            print(f'User {interaction.user} just started the event {event_name[0]}')
+                # Event is created here
+                current_event = match_event
+                current_event['name'] = event_name[0]
+                current_event['id'] = int(event)
+                create_event(db, current_event, duration=duration)  # default duration is 2 hours
+                await interaction.response.send_message(f"✅ FZD event {event_name[0]} successfully started!")
+                print(f'User {interaction.user} just started the event {event_name[0]}')
 
         except Exception as e:
-            print(f"{e=}")
+            print(f"[startEvent] exception {e=}")
             await interaction.response.send_message(f"❌ ERROR! Must choose from available event options -- {opts}", ephemeral=True)
    
     async def cog_load(self):
@@ -77,23 +78,23 @@ class Modify_Events_Users(commands.Cog):
             warning="⚠️  Warning: display_name should be 10 characters or less (as in F-Zero 99 in game name) \n"
         
         try:
-            db_user_id = get_user_id(self.db,interaction.user.name)
-            if db_user_id is None:
-                add_new_user(self.db, interaction.user, display_name=display_name)
-                await interaction.response.send_message(f"{warning}✅  User {interaction.user} is now registered in the FZD database with display name {display_name}", ephemeral=True)
-                print(f"{warning}✅  User {interaction.user} is now registered in the FZD database with display name {display_name}")
-            else:
-                modify_user_display_name(self.db, db_user_id, display_name)
-                await interaction.response.send_message(f"{warning}✅  User {interaction.user} successfully modified their display name to {display_name}", ephemeral=True)
-                print(f"{warning}✅  User {interaction.user} successfully modified their display name to {display_name}")
+            with get_db_connection() as db:
+                db_user_id = get_user_id(db,interaction.user.name)
+                if db_user_id is None:
+                    add_new_user(db,interaction.user, display_name=display_name)
+                    await interaction.response.send_message(f"{warning}✅  User {interaction.user} is now registered in the FZD database with display name {display_name}", ephemeral=True)
+                    print(f"{warning}✅  User {interaction.user} is now registered in the FZD database with display name {display_name}")
+                else:
+                    modify_user_display_name(db, db_user_id, display_name)
+                    await interaction.response.send_message(f"{warning}✅  User {interaction.user} successfully modified their display name to {display_name}", ephemeral=True)
+                    print(f"{warning}✅  User {interaction.user} successfully modified their display name to {display_name}")
 
         except mysql.connector.errors.IntegrityError as ie: # The error you get when you try to enter a duplicate row value to a UNIQUE column
             await interaction.response.send_message(f"{warning}❌ ERROR! The name '{display_name}' is already taken in the database, please use a different name!", ephemeral=True)
-            print(f"IntegrityError: {ie}") 
-
+            print(f"[registerUser] IntegrityError: {ie}") 
         except Exception as e:
             await interaction.response.send_message(f"{warning}❌ ERROR! Something went wrong, please contact FZD staff to address!", ephemeral=True)
-            print(f"Exception occurred in fzd_register: {e}")
+            print(f"[registerUser]Exception occurred in fzd_register: {e}")
     
 async def setup(bot: commands.Bot):
     GUILD_ID=discord.Object(id=os.getenv('SERVER_ID'))
