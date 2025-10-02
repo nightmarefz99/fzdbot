@@ -24,17 +24,21 @@ def format_scoreboard_display_text(allscores) -> list[str]:
          and outputs a list of text lines for each player, 
          where each line contains rank, player name, and scores
          (with some other formatting/flair for a nice-looking scoreboard display)
-    """    
+    """
+    qualemoji="<:LuckyRank:1213541741450231878>"
+    scoreboard=[]    
+    if "is_qualified" in allscores[0] and any(d.get("is_qualified") == 1 for d in allscores):
+       scoreboard.append(f"*{qualemoji} = already qualified for Team World*\n")
+
     rank=0
     last_score = None 
-    scoreboard = []
     isBelowPodium = False
     for iscore, entry in enumerate(allscores):
         player = entry['player']
         score = int(entry['score'])
         if score != last_score:
             rank = iscore + 1
-    
+
         rankdisplay=str(rank)+"\\."
         if rank == 1:
             rankdisplay="<:1st:1201576405339754546> " #emoji=":trophy: "
@@ -43,15 +47,19 @@ def format_scoreboard_display_text(allscores) -> list[str]:
         elif rank == 3:
             rankdisplay="<:3rd:1201576412444905653> " #":third_place: "
        
+        qualdisplay=""
+        if "is_qualified" in entry and entry["is_qualified"] == 1:
+            qualdisplay=f"{qualemoji} "
+
         if not isBelowPodium and rank > 3:
             scoreboard.append("======================")
             isBelowPodium = True
         
         # If we don't escape the dot ("\\.") discord might see the rank as markdown text 
         # And weird behavior could happen as a result
-        scoreboard.append(f"{rankdisplay} **{player}** -- {score} pts")
+        scoreboard.append(f"{rankdisplay}{qualdisplay} **{player}** - {score}")
         last_score = score
-
+    #print(sum(len(s) for s in scoreboard)) 
     return scoreboard
 
 def format_scoreboard_for_discord_embed(lines: list[str], 
@@ -80,5 +88,6 @@ def format_scoreboard_for_discord_embed(lines: list[str],
     # Don’t forget the last block
     if curstr:
         formatted_fields.append(curstr)
-    
+   
+    #print(sum(len(s) for s in formatted_fields)) 
     return formatted_fields  

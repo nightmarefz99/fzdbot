@@ -31,7 +31,7 @@ class Scoreboard(commands.Cog):
     async def showScoreboard(self, interaction: discord.Interaction, event_type: str = None):
         try:
             with get_db_connection() as db:
-                eventinfo, eventscoreslist = get_event_scoreboard(db, event_type=event_type)
+                eventinfo, eventscoreslist = get_event_scoreboard(db, event_type=event_type, getQualified=True)
             
             if not eventinfo: 
                 if event_type:

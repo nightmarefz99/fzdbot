@@ -327,7 +327,7 @@ def get_latest_event(db, event_id=None):
         OPTIONAL: event_id to find latest of a specific event
     """
     #cursor = db.cursor(dictionary=True)
-    sql_getevent="""SELECT es.id, e.name, es.utc_start_dt, es.utc_end_dt 
+    sql_getevent="""SELECT es.id, e.name, es.utc_start_dt, es.utc_end_dt, es.event_id
                     FROM events_scheduled es
                     JOIN events e ON e.id = es.event_id
                     WHERE utc_start_dt =
@@ -343,31 +343,75 @@ def get_latest_event(db, event_id=None):
         params=(event_id,)
         #cursor.execute(sql_getevent, [event_id])
 
+    icoreboard = []
     selectedevent = execute_query(db, sql_getevent, params=params, fetch="one")
     
     #  selectedevent = cursor.fetchone()
     
     return  selectedevent
 
-def get_event_scoreboard(db, event_type=None):
+def get_event_scoreboard(db, event_type=None, getQualified: bool = False):
     """ Query the FZD database for all scores of a given event,
         defined by scheduled_event_id.
 
         Returns an ordered list of dicts with 'player': str and 'score': Decimal 
         as well as the eventinfo (from get_latest_event function)
     """
+    #qual_str = ""
+    #if getQualified#:
+    #    qual_str="1 AS is_qualified,"
 
     sql_getscoreboard=(
-    """SELECT COALESCE(u.tag, u.discord_display_name, u.discord_user_id) AS player, 
-       SUM(erp.score) AS score 
-       FROM  
-         event_result_points erp 
-       JOIN 
-         users u ON u.id = erp.user_id 
-       WHERE scheduled_event_id = %s 
-       GROUP BY player 
-       ORDER BY score DESC;"""
+    """SELECT player, score,
+               CASE WHEN is_qualified AND is_participating 
+               THEN 1 ELSE 0 END as is_qualified
+       FROM (
+           SELECT
+                COALESCE(u.tag, u.discord_user_id) AS player, 
+                SUM(erp.score) AS score,
+                1 as is_qualified,
+                ew.is_participating
+  	   FROM event_result_points erp 
+  	   JOIN users u ON u.id = erp.user_id
+  	   JOIN events_whitelist ew ON ew.user_id = u.id
+           JOIN events e ON e.id = ew.event_id
+           JOIN events_scheduled es ON es.event_id = e.id
+           WHERE erp.scheduled_event_id = %s
+           AND now() < es.utc_start_dt
+           GROUP BY player, is_participating
+
+           UNION
+
+           SELECT
+               COALESCE(u.tag, u.discord_user_id) AS player, 
+               SUM(erp.score) AS score,
+               0 as is_qualified,
+               0 as is_participating
+           FROM event_result_points erp 
+           JOIN users u ON u.id = erp.user_id
+           WHERE erp.scheduled_event_id = %s
+           AND erp.user_id NOT IN (
+               SELECT user_id 
+               FROM events_whitelist ew
+               JOIN events e ON e.id = ew.event_id
+               JOIN events_scheduled es ON es.event_id = e.id
+               WHERE now() < es.utc_start_dt
+           )
+       GROUP BY player, is_participating
+       ORDER BY score DESC
+       ) event_results;"""
     )
+    #f"""SELECT COALESCE(u.tag, u.discord_display_name, u.discord_user_id) AS player, 
+    #   {qual_str}
+    #   SUM(erp.score) AS score 
+    #   FROM  
+    #     event_result_points erp 
+    #   JOIN 
+    #     users u ON u.id = erp.user_id 
+    #   WHERE scheduled_event_id = %s 
+    #   GROUP BY player 
+    #   ORDER BY score DESC;"""
+    #)
     if event_type is None:
         eventinfo=get_latest_event(db)
     else:
@@ -380,6 +424,13 @@ def get_event_scoreboard(db, event_type=None):
    
     #cursor.execute(sql_getscoreboard, [eventinfo['id']]) 
     #allscores = cursor.fetchall() #[{'player': 'Angelo', 'score': Decimal('1140')}...]
-    allscores = execute_query(db, sql_getscoreboard, params=(eventinfo['id'],), fetch="all")
+    allscores = execute_query(db, sql_getscoreboard, params=(eventinfo['id'],eventinfo['id']), fetch="all")
+    
+    # strip off is_qualified results if we're not viewing a qualifier event
+    valid_qual_events = [8,9,10,11,12,13] # MM, Thu FZD, Fri FZD, EAD, CC, APAC
+    if not eventinfo['event_id'] in valid_qual_events: 
+        for d in allscores:
+            d.pop("is_qualified",None)
+
     return eventinfo, allscores
 
