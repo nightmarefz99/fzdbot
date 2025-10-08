@@ -64,7 +64,7 @@ class Scoreboard(commands.Cog):
                           f"❌ ERROR! Something unexpected went wrong, contact an FZD mod to help!",
                           ephemeral=True
                           ) 
-            print(f"[showScoreboard] Exception {e}")
+            print(f"[showScoreboard] Exception {repr(e)}")
     
     async def cog_load(self):
         # Bind autocomplete handler properly

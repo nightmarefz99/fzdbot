@@ -51,7 +51,7 @@ class Scoring(commands.Cog):
                 if (current_event['name'] == "NULL"):
                     await interaction.response.send_message(f"⚠️  Warning: No event is currently active, score was not added!  ", ephemeral=True)
                 else: 
-                    user_data = [current_event['id'], db_user_id, int(score)] 
+                    user_data = [db_user_id, current_event['id'], int(score)] 
                     submit_score(db, user_data) #interaction.user
                     await interaction.response.send_message(f"✅ User {interaction.user} has entered a score of {score} to {current_event['name']}") #, ephemeral=True)
                     print(f"✅ User {interaction.user.nick} has entered a score of {score} to {current_event['name']}")

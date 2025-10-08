@@ -118,7 +118,7 @@ def get_db_connection():
             release_connection(conn)
 
 
-def execute_query(conn, query, params=None, fetch="all"):
+def execute_query(conn, query, params=None, fetch="all", isProc:bool = False):
     """
     Safely executes an SQL query with rollback on error.
     :conn: DB connection object
@@ -130,13 +130,26 @@ def execute_query(conn, query, params=None, fetch="all"):
     cursor=None
     try:
         cursor = conn.cursor(dictionary=True)
-        cursor.execute(query, params or ())
-        if fetch == "all":
-            result = cursor.fetchall()
-        elif fetch == "one":
-            result = cursor.fetchone()
+        if isProc:
+            cursor.callproc(query, params or ())
+            if fetch == "all":
+                for row in cursor.stored_results():
+                    result = row.fetchall()
+                    break
+            elif fetch == "one":
+                for row in cursor.stored_results():
+                    result = row.fetchone()
+                    break
+            else:
+                result = None
         else:
-            result = None
+            cursor.execute(query, params or ())
+            if fetch == "all":
+                result = cursor.fetchall()
+            elif fetch == "one":
+                result = cursor.fetchone()
+            else:
+                result = None
 
         conn.commit()
         return result
@@ -265,13 +278,14 @@ def check_for_active_event(db, hours_from_now: int = 0):
 def submit_score(db, dataentry) -> None:
     """ Executes sql query command to insert data to database
         db = database connection object
-        dataentry = [ scheduled_event_id, user_id, lineup_id, score ] - all integers
+        dataentry = [ user_id, scheduled_event_id, score ] - all integers
     """
     #cursor = db.cursor(dictionary=True)
-    sql_newrow="INSERT INTO event_result_points (scheduled_event_id, user_id, score) VALUES (%s, %s, %s);"
+    #sql_newrow="INSERT INTO event_result_points (scheduled_event_id, user_id, score) VALUES (%s, %s, %s);"
+    sql_newrow="sp_insert_score"
     #cursor.execute(sql_newrow, dataentry)
     #db.commit()
-    execute_query(db, sql_newrow, params=dataentry, fetch=None)
+    execute_query(db, sql_newrow, params=dataentry, fetch=None, isProc=True)
 
 def edit_score(db, dataentry) -> None:
     """ Executes sql query command to insert data to database
@@ -360,47 +374,47 @@ def get_event_scoreboard(db, event_type=None, getQualified: bool = False):
     #qual_str = ""
     #if getQualified#:
     #    qual_str="1 AS is_qualified,"
-
-    sql_getscoreboard=(
-    """SELECT player, score,
-               CASE WHEN is_qualified AND is_participating 
-               THEN 1 ELSE 0 END as is_qualified
-       FROM (
-           SELECT
-                COALESCE(u.tag, u.discord_user_id) AS player, 
-                SUM(erp.score) AS score,
-                1 as is_qualified,
-                ew.is_participating
-  	   FROM event_result_points erp 
-  	   JOIN users u ON u.id = erp.user_id
-  	   JOIN events_whitelist ew ON ew.user_id = u.id
-           JOIN events e ON e.id = ew.event_id
-           JOIN events_scheduled es ON es.event_id = e.id
-           WHERE erp.scheduled_event_id = %s
-           AND now() < es.utc_start_dt
-           GROUP BY player, is_participating
-
-           UNION
-
-           SELECT
-               COALESCE(u.tag, u.discord_user_id) AS player, 
-               SUM(erp.score) AS score,
-               0 as is_qualified,
-               0 as is_participating
-           FROM event_result_points erp 
-           JOIN users u ON u.id = erp.user_id
-           WHERE erp.scheduled_event_id = %s
-           AND erp.user_id NOT IN (
-               SELECT user_id 
-               FROM events_whitelist ew
-               JOIN events e ON e.id = ew.event_id
-               JOIN events_scheduled es ON es.event_id = e.id
-               WHERE now() < es.utc_start_dt
-           )
-       GROUP BY player, is_participating
-       ORDER BY score DESC
-       ) event_results;"""
-    )
+    sql_getscoreboard="sp_show_scoreboard"
+    #sql_getscoreboard=(
+    #"""SELECT player, score,
+    #           CASE WHEN is_qualified AND is_participating 
+    #           THEN 1 ELSE 0 END as is_qualified
+    #   FROM (
+    #       SELECT
+    #            COALESCE(u.tag, u.discord_user_id) AS player, 
+    #            SUM(erp.score) AS score,
+    #            1 as is_qualified,
+    #            ew.is_participating
+ # 	   FROM event_result_points erp 
+ # 	   JOIN users u ON u.id = erp.user_id
+ # 	   JOIN events_whitelist ew ON ew.user_id = u.id
+ #          JOIN events e ON e.id = ew.event_id
+ #          JOIN events_scheduled es ON es.event_id = e.id
+ #          WHERE erp.scheduled_event_id = %s
+ #          AND now() < es.utc_start_dt
+ #          GROUP BY player, is_participating
+#
+#           UNION
+#
+#           SELECT
+#               COALESCE(u.tag, u.discord_user_id) AS player, 
+#               SUM(erp.score) AS score,
+#               0 as is_qualified,
+#               0 as is_participating
+#           FROM event_result_points erp 
+#           JOIN users u ON u.id = erp.user_id
+#           WHERE erp.scheduled_event_id = %s
+#           AND erp.user_id NOT IN (
+#               SELECT user_id 
+#               FROM events_whitelist ew
+#               JOIN events e ON e.id = ew.event_id
+#               JOIN events_scheduled es ON es.event_id = e.id
+#               WHERE now() < es.utc_start_dt
+#           )
+#       GROUP BY player, is_participating
+#       ORDER BY score DESC
+#       ) event_results;"""
+#    )
     #f"""SELECT COALESCE(u.tag, u.discord_display_name, u.discord_user_id) AS player, 
     #   {qual_str}
     #   SUM(erp.score) AS score 
@@ -424,7 +438,8 @@ def get_event_scoreboard(db, event_type=None, getQualified: bool = False):
    
     #cursor.execute(sql_getscoreboard, [eventinfo['id']]) 
     #allscores = cursor.fetchall() #[{'player': 'Angelo', 'score': Decimal('1140')}...]
-    allscores = execute_query(db, sql_getscoreboard, params=(eventinfo['id'],eventinfo['id']), fetch="all")
+
+    allscores = execute_query(db, sql_getscoreboard, params=(eventinfo['id'],), isProc=True)
     
     # strip off is_qualified results if we're not viewing a qualifier event
     valid_qual_events = [8,9,10,11,12,13] # MM, Thu FZD, Fri FZD, EAD, CC, APAC
