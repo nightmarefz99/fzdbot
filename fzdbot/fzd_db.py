@@ -440,7 +440,6 @@ def get_event_scoreboard(db, event_type=None, getQualified: bool = False):
     #allscores = cursor.fetchall() #[{'player': 'Angelo', 'score': Decimal('1140')}...]
 
     allscores = execute_query(db, sql_getscoreboard, params=(eventinfo['id'],), isProc=True)
-    
     # strip off is_qualified results if we're not viewing a qualifier event
     valid_qual_events = [8,9,10,11,12,13] # MM, Thu FZD, Fri FZD, EAD, CC, APAC
     if not eventinfo['event_id'] in valid_qual_events: 

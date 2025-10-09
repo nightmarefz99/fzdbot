@@ -39,15 +39,15 @@ def format_scoreboard_display_text(allscores) -> list[str]:
     team_names = {d['team'] for d in allscores}
     team_names.discard(None) # Remove any non-team entries
     if team_names: 
-        print(team_names)
+        #print(team_names)
         team_scores=[]
         for team in team_names: 
             team_scores.append((sum([s['score'] for s in allscores if s['team'] == team]),team))
-        print(team_scores)
+        #print(team_scores)
         
         #team_scores_and_names = zip(team_scores, team_names)
         sorted_team_results = sorted(team_scores, reverse=True)
-        print(sorted_team_results)  
+        #print(sorted_team_results)  
       
         rank=0
         last_score = None
@@ -92,13 +92,15 @@ def format_scoreboard_display_text(allscores) -> list[str]:
             rankdisplay="<:3rd:1201576412444905653> " #":third_place: "
         
         if team_names:
-            rankdisplay=f"{entry['team']}: "      
+            rankdisplay=f"{entry['team']}: "
+            if "emote" in entry:
+                rankdisplay=f"{entry['emote']} "
  
         qualdisplay=""
         if "is_qualified" in entry and entry["is_qualified"] == 1:
             qualdisplay=f"{qualemoji} "
 
-        if not isBelowPodium and rank > 3:
+        if not team_names and not isBelowPodium and rank > 3:
             scoreboard.append("======================")
             isBelowPodium = True
         
