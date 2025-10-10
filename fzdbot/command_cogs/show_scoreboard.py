@@ -16,8 +16,6 @@ from fzdbot.formatters import format_scoreboard_for_discord_embed
 class Scoreboard(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        with get_db_connection() as db:
-            self.recurring_events = get_event_types(db)
 
     async def event_type_autocomplete(self, interaction: discord.Interaction,
                                       current: str) -> list[app_commands.Choice[str]]:
@@ -30,8 +28,8 @@ class Scoreboard(commands.Cog):
     @app_commands.command(name="fzd_show", description="Show most current FZD event scoreboard") #,  guild=GUILD_ID)
     async def showScoreboard(self, interaction: discord.Interaction, event_type: str = None):
         try:
-            with get_db_connection() as db:
-                eventinfo, eventscoreslist = get_event_scoreboard(db, event_type=event_type, getQualified=True)
+            async with get_db_connection() as db:
+                eventinfo, eventscoreslist = await get_event_scoreboard(db, event_type=event_type, getQualified=True)
             
             if not eventinfo: 
                 if event_type:
@@ -69,7 +67,8 @@ class Scoreboard(commands.Cog):
     async def cog_load(self):
         # Bind autocomplete handler properly
         self.showScoreboard.autocomplete("event_type")(self.event_type_autocomplete)
-
+        async with get_db_connection() as db:
+            self.recurring_events = await get_event_types(db)
 
 async def setup(bot: commands.Bot):
     GUILD_ID=discord.Object(id=os.getenv('SERVER_ID'))

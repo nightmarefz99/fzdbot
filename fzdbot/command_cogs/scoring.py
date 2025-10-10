@@ -19,8 +19,6 @@ from fzdbot.views.confirm_delete import ConfirmDeleteScore
 class Scoring(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        #self.db = connect_to_database()
-        #self.recurring_events = get_event_types(self.db)
 
     # =============================================================================================================
     #   /add_score 
@@ -38,21 +36,21 @@ class Scoring(commands.Cog):
                 raise OverflowError(f"score entered too large! {interaction.user}")
     
             # Get user id first, or add user if not registered in database
-            with get_db_connection() as db:
-                db_user_id = get_user_id(db,interaction.user.name)
+            async with get_db_connection() as db:
+                db_user_id = await get_user_id(db,interaction.user.name)
                 if db_user_id is None:
-                    add_new_user(db, interaction.user, display_name=interaction.user.nick[0:10])
-                    db_user_id = get_user_id(db, interaction.user.name)
+                    await add_new_user(db, interaction.user, display_name=interaction.user.nick[0:10])
+                    db_user_id = await get_user_id(db, interaction.user.name)
                     if db_user_id is None:
                         raise TypeError(f"Could not add new user {interaction.user}")
             
                 # check an event is active before adding data
-                current_event = check_for_active_event(db)
+                current_event = await check_for_active_event(db)
                 if (current_event['name'] == "NULL"):
                     await interaction.response.send_message(f"⚠️  Warning: No event is currently active, score was not added!  ", ephemeral=True)
                 else: 
                     user_data = [db_user_id, current_event['id'], int(score)] 
-                    submit_score(db, user_data) #interaction.user
+                    await submit_score(db, user_data) #interaction.user
                     await interaction.response.send_message(f"✅ User {interaction.user} has entered a score of {score} to {current_event['name']}") #, ephemeral=True)
                     print(f"✅ User {interaction.user.nick} has entered a score of {score} to {current_event['name']}")
 
@@ -71,8 +69,8 @@ class Scoring(commands.Cog):
     # Autocomplete handler for editScore and deleteScore (same for both)
     # ------------------------------------------------------------------
     async def user_scores_autocomplete(self, interaction: discord.Interaction, current: str):
-        with get_db_connection() as db:
-            user_scores = get_user_scores(db,interaction.user.name)
+        async with get_db_connection() as db:
+            user_scores = await get_user_scores(db,interaction.user.name)
   
         # Filter based on what the user is currently typing
         choices = [(opt['score'], opt['id']) for opt in user_scores if current.lower() in opt['score'].lower()]
@@ -88,8 +86,8 @@ class Scoring(commands.Cog):
     async def editScore(self, interaction: discord.Interaction, old_score: str, new_score: str):
         #  old_score is returned packed as "<score>|<id>" when a proper option is selected
         try:
-            with get_db_connection() as db:
-                valid_options = get_user_scores(db, interaction.user.name)
+            async with get_db_connection() as db:
+                valid_options = await get_user_scores(db, interaction.user.name)
                 opts = [s['score'] for s in valid_options if 'score' in s]
                 score, idchoice = old_score.split("|")
                 if score not in opts:
@@ -106,7 +104,7 @@ class Scoring(commands.Cog):
                           ephemeral=True
                           )
                 else:    
-                    edit_score(db, (int(new_score), int(idchoice))) 
+                    await edit_score(db, (int(new_score), int(idchoice))) 
                     await interaction.response.send_message(
                           f"✅ User {interaction.user.name} has modified submitted score from {score} to {new_score}"
                           )
@@ -129,8 +127,8 @@ class Scoring(commands.Cog):
     async def deleteScore(self, interaction: discord.Interaction, score_to_delete: str):
         #  score_to_delete is returned packed as "<score>|<id>" when a proper option is selected
         try:
-            with get_db_connection() as db:
-                valid_options = get_user_scores(db,interaction.user.name)
+            async with get_db_connection() as db:
+                valid_options = await get_user_scores(db,interaction.user.name)
                 opts = [s['score'] for s in valid_options if 'score' in s]
                 
                 score, idchoice = score_to_delete.split("|")
@@ -154,7 +152,7 @@ class Scoring(commands.Cog):
                                                         )
                     await view.wait() # Wait for user to make choice
                     if view.confirmed:
-                        delete_score(db,[idchoice])
+                        await delete_score(db,[idchoice])
                         await interaction.followup.send(
                               content=f"✅ User {interaction.user.name} has successfully deleted '{score}' from their submitted scores",
                               ephemeral=False

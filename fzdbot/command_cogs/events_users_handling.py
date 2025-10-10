@@ -1,11 +1,13 @@
 # Miscellaneous bot commands for registering users in the database (/register)
 # or modifying events (/start_event only for now) 
 import os
+import time
 from datetime import timezone
 import discord
 from discord.ext import commands
 from discord import app_commands
-import mysql.connector
+import aiomysql
+import asyncio
 
 from fzdbot.fzd_db import get_db_connection #connect_to_database
 from fzdbot.fzd_db import get_event_types
@@ -18,8 +20,6 @@ from fzdbot.fzd_db import create_event
 class Modify_Events_Users(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        with get_db_connection() as db:
-            self.recurring_events = get_event_types(db)
 
     async def event_type_autocomplete(self, interaction: discord.Interaction,
                                       current: str) -> list[app_commands.Choice[str]]:
@@ -39,10 +39,10 @@ class Modify_Events_Users(commands.Cog):
             if not event_name: # in the rare case user inputs an integer 'event', and above line returns empty list
                 raise IndexError("chosen event not part of list")
 
-            with get_db_connection() as db:
+            async with get_db_connection() as db:
                 # Check every hour in the proposed new event for possible overlap with database events
                 for hour_to_check in range(0,duration+1):
-                    match_event = check_for_active_event(db, hours_from_now=hour_to_check)
+                    match_event = await check_for_active_event(db, hours_from_now=hour_to_check)
                     if (match_event['name'] != "NULL"):
                         message=f"another event is currently running -- {match_event['name']}"
                         if hour_to_check > 0:
@@ -54,7 +54,7 @@ class Modify_Events_Users(commands.Cog):
                 current_event = match_event
                 current_event['name'] = event_name[0]
                 current_event['id'] = int(event)
-                create_event(db, current_event, duration=duration)  # default duration is 2 hours
+                await create_event(db, current_event, duration=duration)  # default duration is 2 hours
                 await interaction.response.send_message(f"✅ FZD event {event_name[0]} successfully started!")
                 print(f'User {interaction.user} just started the event {event_name[0]}')
 
@@ -65,7 +65,8 @@ class Modify_Events_Users(commands.Cog):
     async def cog_load(self):
         # Bind autocomplete handler properly
         self.startEvent.autocomplete("event")(self.event_type_autocomplete)
-
+        async with get_db_connection() as db:
+            self.recurring_events = await get_event_types(db)
 
     # This command registers a user into the database
     @app_commands.command(name="fzd_register", description="Register your discord id to FZD scoreboard database")
@@ -78,14 +79,14 @@ class Modify_Events_Users(commands.Cog):
             warning="⚠️  Warning: display_name should be 10 characters or less (as in F-Zero 99 in game name) \n"
         
         try:
-            with get_db_connection() as db:
-                db_user_id = get_user_id(db,interaction.user.name)
+            async with get_db_connection() as db:
+                db_user_id = await get_user_id(db,interaction.user.name)
                 if db_user_id is None:
-                    add_new_user(db,interaction.user, display_name=display_name)
+                    await add_new_user(db,interaction.user, display_name=display_name)
                     await interaction.response.send_message(f"{warning}✅  User {interaction.user} is now registered in the FZD database with display name {display_name}", ephemeral=True)
                     print(f"{warning}✅  User {interaction.user} is now registered in the FZD database with display name {display_name}")
                 else:
-                    modify_user_display_name(db, db_user_id, display_name)
+                    await modify_user_display_name(db, db_user_id, display_name)
                     await interaction.response.send_message(f"{warning}✅  User {interaction.user} successfully modified their display name to {display_name}", ephemeral=True)
                     print(f"{warning}✅  User {interaction.user} successfully modified their display name to {display_name}")
 
@@ -95,7 +96,15 @@ class Modify_Events_Users(commands.Cog):
         except Exception as e:
             await interaction.response.send_message(f"{warning}❌ ERROR! Something went wrong, please contact FZD staff to address!", ephemeral=True)
             print(f"[registerUser]Exception occurred in fzd_register: {e}")
-    
+   
+    #@app_commands.command(name="test_async")
+    #async def test_async(self, interaction: discord.Interaction, delay: int):
+    #    start = time.perf_counter()
+    #    await interaction.response.send_message(f"Starting {delay}s delay...", ephemeral=True)
+    #    await asyncio.sleep(delay)
+    #    end = time.perf_counter()
+    #    print(f"Command with delay={delay} done after {end - start:.1f}s") 
+
 async def setup(bot: commands.Bot):
     GUILD_ID=discord.Object(id=os.getenv('SERVER_ID'))
     await bot.add_cog(Modify_Events_Users(bot), guild=GUILD_ID)

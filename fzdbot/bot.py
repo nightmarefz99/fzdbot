@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 import discord
 from discord.ext import commands
 from discord import app_commands
-
+from fzdbot.fzd_db import init_db_pool
 
 
 # LOAD INFO FROM .env FILE
@@ -31,6 +31,7 @@ class FZDBot(commands.Bot):
         """Called automatically at startup, safe for async setup."""
         # Load all cogs from /command_cogs folder
         try:
+            self.db_pool = await init_db_pool()
             await self.load_extension("fzdbot.command_cogs.show_scoreboard")
             await self.load_extension("fzdbot.command_cogs.scoring")
             await self.load_extension("fzdbot.command_cogs.events_users_handling")

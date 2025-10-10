@@ -30,28 +30,18 @@ def format_scoreboard_display_text(allscores) -> list[str]:
     if "is_qualified" in allscores[0] and any(d.get("is_qualified") == 1 for d in allscores):
        scoreboard.append(f"*{qualemoji} = already qualified for Team World*\n")
 
-    #teamDisplay = False
-    #if "team" in allscores[0] and any(d.get("team") is not None for d in allscores):
-    #   teamDisplay = True
-    
-    #if teamDisplay:
     isBelowPodium = False
     team_names = {d['team'] for d in allscores}
     team_names.discard(None) # Remove any non-team entries
     if team_names: 
-        #print(team_names)
         team_scores=[]
         for team in team_names: 
             team_scores.append((sum([s['score'] for s in allscores if s['team'] == team]),team))
-        #print(team_scores)
         
-        #team_scores_and_names = zip(team_scores, team_names)
         sorted_team_results = sorted(team_scores, reverse=True)
-        #print(sorted_team_results)  
       
         rank=0
         last_score = None
-        #isBelowPodium = False
         for iscore, (score, team) in enumerate(sorted_team_results):
             if score != last_score:
                 rank = iscore + 1
@@ -65,7 +55,6 @@ def format_scoreboard_display_text(allscores) -> list[str]:
                 rankdisplay="<:3rd:1201576412444905653> " #":third_place: "
             
             if not isBelowPodium and rank > 3:
-               # scoreboard.append("======================")
                 isBelowPodium = True
 
             # If we don't escape the dot ("\\.") discord might see the rank as markdown text 
@@ -76,7 +65,6 @@ def format_scoreboard_display_text(allscores) -> list[str]:
     
     rank=0
     last_score = None 
-    #isBelowPodium = False
     for iscore, entry in enumerate(allscores):
         player = entry['player']
         score = int(entry['score'])
@@ -108,7 +96,7 @@ def format_scoreboard_display_text(allscores) -> list[str]:
         # And weird behavior could happen as a result
         scoreboard.append(f"{rankdisplay}{qualdisplay} **{player}** - {score}")
         last_score = score
-    #print(sum(len(s) for s in scoreboard)) 
+    
     return scoreboard
 
 def format_scoreboard_for_discord_embed(lines: list[str], 
@@ -138,5 +126,4 @@ def format_scoreboard_for_discord_embed(lines: list[str],
     if curstr:
         formatted_fields.append(curstr)
    
-    #print(sum(len(s) for s in formatted_fields)) 
     return formatted_fields  
