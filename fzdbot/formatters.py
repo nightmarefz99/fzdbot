@@ -1,6 +1,9 @@
 # This file contains format functions for displaying results from past events into discord,
 # mainly used in the "/show" command as of right now
 from datetime import datetime, timedelta, timezone
+#<:CupAPACChamp:1239639234500104235>
+#<:CupMachineChamp:1239640891526742036>
+#<:CupCrackChamp:1239639247582138440>
 
 def format_discord_timestamp(dt, inline=False) -> str:
     """ Flexible timestamp builder.
@@ -127,3 +130,25 @@ def format_scoreboard_for_discord_embed(lines: list[str],
         formatted_fields.append(curstr)
    
     return formatted_fields  
+
+def format_events_schedule(events):
+    """
+    Given a list of events for a week, create list of strings for each event to put in an embed.
+    """
+    # Extract start and end utc dates, make sure to lavel datetime object timezone needed for
+    # formatting to discord timestamp
+    utc_start = [e['utc_start'].replace(tzinfo=timezone.utc) for e in events if 'utc_start' in e]
+    utc_end   = [e['utc_end'].replace(tzinfo=timezone.utc) for e in events if 'utc_end' in e]
+
+    events_start_discord_timestamps = [format_discord_timestamp(s) for s in utc_start]
+    events_end_discord_timestamps   = [format_discord_timestamp(e) for e in utc_end]
+   
+    events_names = [e['event'] for e in events if 'event' in e]
+
+    formatted_fields = []
+    curstr=""
+    for event,start,end in zip(events_names,events_start_discord_timestamps,events_end_discord_timestamps):
+        curstr += event + ": "+start+ " \n "
+    formatted_fields.append(curstr)
+    return formatted_fields
+

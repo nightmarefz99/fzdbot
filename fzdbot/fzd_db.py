@@ -169,7 +169,7 @@ async def check_for_active_event(db, hours_from_now: int = 0):
         event is active right now, returns dict with name and id
     """
     active_event = {'name':"NULL",'id':0} # Assume no match
-    sql_getevent="""SELECT es.id, e.name, es.utc_start_dt, es.utc_end_dt 
+    sql_getevent="""SELECT es.id, e.name, es.utc_start_dt, es.utc_end_dt, es.scoring_method
                     FROM events_scheduled es
                     JOIN events e ON e.id = es.event_id
                     WHERE DATE_ADD(UTC_TIMESTAMP(), INTERVAL %s HOUR) 
@@ -178,16 +178,19 @@ async def check_for_active_event(db, hours_from_now: int = 0):
     if eventmatch:
         active_event['name'] = eventmatch['name']
         active_event['id']   = eventmatch['id']
+        active_event['scoring_method'] = eventmatch['scoring_method']
 
     return active_event
 
-async def submit_score(db, dataentry) -> None:
+async def submit_score(db, dataentry) -> int:
     """ Executes sql query command to insert data to database
         db = database connection object
         dataentry = [ user_id, scheduled_event_id, score ] - all integers
     """
     sql_newrow="sp_insert_score"
-    await execute_query(db, sql_newrow, params=dataentry, fetch=None, isProc=True)
+    dataentry.append("NULL") # fifth argument is what will be returned...handled by "fetch" in python
+    score = await execute_query(db, sql_newrow, params=dataentry, fetch="one", isProc=True)
+    return int(score['@sp_output_score'])
 
 async def edit_score(db, dataentry) -> None:
     """ Executes sql query command to insert data to database
@@ -207,13 +210,15 @@ async def delete_score(db, dataentry) -> None:
     sql_deleterow="DELETE FROM event_result_points WHERE id = %s;"
     await execute_query(db, sql_deleterow, params=dataentry, fetch=None)
 
-async def get_user_scores(db, user_name) -> list[dict[str,str]]:
+async def get_user_scores(db, user_name, check_for_score_method=False) -> list[dict[str,str]]:
     """ Query the database for scores of active event of a given user
         Returns all values as strings for autocomplete bot feature
     """
     active_event =  await check_for_active_event(db)
     if (active_event['name'] == "NULL"):
         return [{'score':"NO CURRENT EVENT", 'id':'-999'}]
+    elif (check_for_score_method and active_event['scoring_method'] == "placement"):
+        return [{'score':"DISABLED FOR THIS EVENT", 'id':'-888'}]
     db_user_id = await get_user_id(db, user_name)
     
     sql_getscores = """SELECT CAST(score AS CHAR) AS score, 
@@ -232,7 +237,10 @@ async def get_latest_event(db, event_id=None):
     """ Get most recent event, return a dict containing the unique id, 
         name of event, and start date of the event
         OPTIONAL: event_id to find latest of a specific event
+                  event)subid if an event_id has multiple sub0events (i.e. GGP)
+                  NOTE only ONE is allowed to be set when called! 
     """
+
     sql_getevent="""SELECT es.id, e.name, es.utc_start_dt, es.utc_end_dt, es.event_id
                     FROM events_scheduled es
                     JOIN events e ON e.id = es.event_id
@@ -240,7 +248,7 @@ async def get_latest_event(db, event_id=None):
                         (SELECT MAX(utc_start_dt) FROM events_scheduled 
                          WHERE utc_start_dt < UTC_TIMESTAMP())"""
     params=None
-    if event_id is not None:
+    if event_id is not None: 
         sql_getevent = sql_getevent.replace("())", "() AND event_id = %s)")
         params=(event_id,)
 
@@ -248,7 +256,7 @@ async def get_latest_event(db, event_id=None):
     
     return  selectedevent
 
-async def get_event_scoreboard(db, event_type=None, getQualified: bool = False):
+async def get_event_scoreboard(db, db_user_id: int, event_type=None):
     """ Query the FZD database for all scores of a given event,
         defined by scheduled_event_id.
 
@@ -257,7 +265,7 @@ async def get_event_scoreboard(db, event_type=None, getQualified: bool = False):
     """
     sql_getscoreboard="sp_show_scoreboard"
     
-    if event_type is None:
+    if event_type is None: 
         eventinfo=await get_latest_event(db)
     else:
         eventinfo=await get_latest_event(db, event_id=int(event_type))
@@ -265,9 +273,10 @@ async def get_event_scoreboard(db, event_type=None, getQualified: bool = False):
     # Check there's an event to display
     if not eventinfo:
         return None, None
+    
+    allscores = await execute_query(db, sql_getscoreboard, params=(eventinfo['id'],db_user_id), isProc=True)
 
-    allscores = await execute_query(db, sql_getscoreboard, params=(eventinfo['id'],), isProc=True)
-
+    print(allscores)
     # strip off is_qualified results if we're not viewing a qualifier event
     valid_qual_events = [8,9,10,11,12,13] # MM, Thu FZD, Fri FZD, EAD, CC, APAC
     if not eventinfo['event_id'] in valid_qual_events: 
@@ -276,3 +285,22 @@ async def get_event_scoreboard(db, event_type=None, getQualified: bool = False):
 
     return eventinfo, allscores
 
+async def get_event_schedule(db):
+    """ Executes sql process query to get scheduled events in future
+    """         
+    sql_events="SELECT event, utc_start, utc_end FROM vw_list_scheduled_events"
+    events = await execute_query(db, sql_events, params=None, fetch="all", isProc=False)
+    #print(events)
+    #print(type(events))
+    return events
+
+async def get_ggp7_events(db):
+    EVENT_IDS_GGP7=os.getenv("EVENT_IDS_GGP7").split()
+    start_id=EVENT_IDS_GGP7[0]
+    end_id=EVENT_IDS_GGP7[3]
+    sql_events="""SELECT es.event_id, e.name, es.utc_start_dt, es.utc_end_dt, es.scoring_method
+                    FROM events_scheduled es
+                    JOIN events e ON e.id = es.event_id
+                    WHERE event_id >= %s AND event_id <= %s"""
+    events = await execute_query(db, sql_events, params=(start_id,end_id), fetch="all", isProc=False)
+    return events

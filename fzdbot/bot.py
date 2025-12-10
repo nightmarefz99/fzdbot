@@ -22,6 +22,8 @@ GUILD_ID = discord.Object(id=os.getenv('SERVER_ID'))
 # BOT SETUP
 intents = discord.Intents.default()
 intents.message_content = True  # Required to read message content
+intents.guilds = True
+intents.messages = True
 
 class FZDBot(commands.Bot):
     def __init__(self, **kwargs):
@@ -47,6 +49,7 @@ class FZDBot(commands.Bot):
             print(f'Error syncing commands: {e}')
 
     async def on_ready(self) -> None:
+        await self.load_extension("fzdbot.command_cogs.live_manager")
         print(f'✅ {self.user} is now running!')
 
 

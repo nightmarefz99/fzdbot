@@ -16,6 +16,8 @@ from fzdbot.fzd_db import get_user_id
 from fzdbot.fzd_db import modify_user_display_name
 from fzdbot.fzd_db import check_for_active_event
 from fzdbot.fzd_db import create_event
+from fzdbot.fzd_db import get_event_schedule
+from fzdbot.formatters import format_events_schedule
 
 class Modify_Events_Users(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -104,6 +106,20 @@ class Modify_Events_Users(commands.Cog):
     #    await asyncio.sleep(delay)
     #    end = time.perf_counter()
     #    print(f"Command with delay={delay} done after {end - start:.1f}s") 
+
+    @app_commands.command(name="fzd_events_schedule", description="View upcoming FZD events schedule")
+    async def viewSchedule(self, interaction: discord.Interaction):
+        try:
+            async with get_db_connection() as db:
+                events = await get_event_schedule(db)
+                formatted_lines = format_events_schedule(events)
+                schedule = discord.Embed(title="Upcoming FZD Events Schedule", description="")
+                schedule.set_thumbnail(url="https://media.discordapp.net/attachments/1399501477608951933/1400792457007861800/Supernova_Server_Icon.png?ex=689c6da3&is=689b1c23&hm=68b8d8790d30689fbad0dfb9341c78921ecf9afecc5919880c81680329c32644&=&format=webp&quality=lossless&width=1024&height=1024") 
+                schedule.add_field(name="", value=formatted_lines[0], inline=False)
+                await interaction.response.send_message(embed=schedule)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ ERROR! Something went wrong, please contact FZD staff to address!", ephemeral=True)
+            print(f"[viewSchedule] Exception occurred in fzd_events_schedule: {e}")
 
 async def setup(bot: commands.Bot):
     GUILD_ID=discord.Object(id=os.getenv('SERVER_ID'))
