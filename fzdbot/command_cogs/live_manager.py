@@ -53,19 +53,18 @@ class LiveScoreboardManager(commands.Cog):
 
                 print(f"{ev_id} ===> {EVENT_STATIC_DATA}")           
                 # Event currently active
-                if start <= now <= end:
-                    for thread_id, user_id in zip(thread_ids, user_ids):
+                for thread_id, user_id in zip(thread_ids, user_ids):
+                    if start <= now <= end:
                         if thread_id not in self.active_tasks:
                             print(f"Starting task for event {ev_id}, {user_id}")
                             self.active_tasks[thread_id] = LiveScoreboardTask(
                                                        self.bot, ev_id, thread_id, 
                                                        start, end, user_id )
-
-                        # Event already ended & task exists → stop it
-                        elif thread_id in self.active_tasks:
-                            print(f"Stopping task for event {ev_id}, {user_id}")
-                            task = self.active_tasks.pop(thread_id)
-                            task.update_scoreboard.cancel()
+                    # Event already ended & task exists → stop it
+                    elif thread_id in self.active_tasks:
+                        print(f"Stopping task for event {ev_id}, {user_id}")
+                        task = self.active_tasks.pop(thread_id)
+                        task.update_scoreboard.cancel()
 
     @scan_events.before_loop
     async def before_scan(self):
