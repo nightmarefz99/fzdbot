@@ -46,25 +46,26 @@ class LiveScoreboardManager(commands.Cog):
             
             # Extract thread ids and user ids from .env
             # for chosen event
-            EVENT_STATIC_DATA = [d for d in LC.DIVISION_DICT if int(d.get("id")) == ev_id][0] # dict
-            thread_ids = EVENT_STATIC_DATA["thread_ids"].split()
-            user_ids = EVENT_STATIC_DATA["user_ids"].split()
+            EVENT_STATIC_DATA = [d for d in LC.DIVISION_DICT if int(d.get("id")) == ev_id] # dict
+            if EVENT_STATIC_DATA:
+                thread_ids = EVENT_STATIC_DATA[0]["thread_ids"].split()
+                user_ids = EVENT_STATIC_DATA[0]["user_ids"].split()
 
-            print(f"{ev_id} ===> {EVENT_STATIC_DATA}")           
-            # Event currently active
-            if start <= now <= end:
-                for thread_id, user_id in zip(thread_ids, user_ids):
-                    if thread_id not in self.active_tasks:
-                        print(f"Starting task for event {ev_id}, {user_id}")
-                        self.active_tasks[thread_id] = LiveScoreboardTask(
-                                                   self.bot, ev_id, thread_id, 
-                                                   start, end, user_id )
+                print(f"{ev_id} ===> {EVENT_STATIC_DATA}")           
+                # Event currently active
+                if start <= now <= end:
+                    for thread_id, user_id in zip(thread_ids, user_ids):
+                        if thread_id not in self.active_tasks:
+                            print(f"Starting task for event {ev_id}, {user_id}")
+                            self.active_tasks[thread_id] = LiveScoreboardTask(
+                                                       self.bot, ev_id, thread_id, 
+                                                       start, end, user_id )
 
-                    # Event already ended & task exists → stop it
-                    elif thread_id in self.active_tasks:
-                        print(f"Stopping task for event {ev_id}, {user_id}")
-                        task = self.active_tasks.pop(thread_id)
-                        task.update_loop.cancel()
+                        # Event already ended & task exists → stop it
+                        elif thread_id in self.active_tasks:
+                            print(f"Stopping task for event {ev_id}, {user_id}")
+                            task = self.active_tasks.pop(thread_id)
+                            task.update_scoreboard.cancel()
 
     @scan_events.before_loop
     async def before_scan(self):
