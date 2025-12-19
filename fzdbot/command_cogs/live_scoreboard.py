@@ -42,9 +42,14 @@ class LiveScoreboardTask:
         
         if eventinfo:
             eventdate = eventinfo['utc_start_dt'].replace(tzinfo=timezone.utc)
+            title=eventinfo['name']
+            # Check for division name, put in title if so
+            has_divisions = any(d.get("division") is not None for d in eventscoreslist)
+            if has_divisions:
+                title=title+" - "+eventscoreslist[0]["division"]
             scoreboard = discord.Embed(title=eventinfo['name']+"-- 🏁 Live Event Scoreboard", 
                                        description=f"*Played on {format_discord_timestamp(eventdate)}*", 
-                                       color=discord.Color.blue())
+                                       color=discord.Color.gold())
             scoreboard.set_thumbnail(url=thumbnail)
             if not eventscoreslist:
                 scoreboard.add_field(name="", value="NO RESULTS TO DISPLAY YET", inline=False)
@@ -54,7 +59,7 @@ class LiveScoreboardTask:
                 for i, block in enumerate(fields_display_text, start=1):
                     scoreboard.add_field(name="", value=block, inline=False)
 
-            scoreboard.set_footer(text=f"Auto-updated every {update_interval} seconds")
+            scoreboard.set_footer(text=f"🏁 Live Event Scoreboard: Updates every {update_interval} seconds 🏁")
             return scoreboard
 
     @tasks.loop(seconds=update_interval)
@@ -68,7 +73,7 @@ class LiveScoreboardTask:
             return  # Do nothing if outside event window
 
         # Get thread from id provided, ensure it exists
-        print(self.thread_id)
+        #print(self.thread_id)
         thread = await self.bot.fetch_channel(self.thread_id)
         if thread is None:
             print(f"[ERROR] Event {self.event_id}: thread not found")

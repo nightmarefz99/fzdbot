@@ -50,6 +50,8 @@ class Scoring(commands.Cog):
                     await interaction.response.send_message(f"⚠️  Warning: No event is currently active, score was not added!  ", ephemeral=True)
                 elif (current_event['scoring_method'] != "points"):
                     await interaction.response.send_message(f"⚠️  Warning: {current_event['name']} requires rank results, please use /fzd_add_rank ", ephemeral=True)
+                elif (current_event['name'] == "GGP7 - Roulette"):
+                    await interaction.response.send_message(f"⚠️  Warning: {current_event['name']} Team Event will be scored manually by FZD mods, do not submit scores to the bot!", ephemeral=True)
                 else: 
                     user_data = [db_user_id, current_event['id'], int(score), current_event['scoring_method']] 
                     return_score = await submit_score(db, user_data) #interaction.user
@@ -99,7 +101,7 @@ class Scoring(commands.Cog):
                 else:
                     user_data = [db_user_id, current_event['id'], int(rank), current_event['scoring_method']]
                     return_score = await submit_score(db, user_data) #interaction.user
-                    await interaction.response.send_message(f"✅ User {interaction.user} has entered rank {rank} - {return_score} points have been added to {current_event['name']}") #, ephemeral=True)
+                    await interaction.response.send_message(f"✅ User {interaction.user} has entered rank {rank} → {return_score} points have been added to {current_event['name']}") #, ephemeral=True)
                     print(f"✅ User {interaction.user.nick} has entered a score of {rank},  {return_score} to {current_event['name']}")
 
         except ValueError as ve: # should catch negative numbers and any errors with int(score) if score is not a base 10 integer

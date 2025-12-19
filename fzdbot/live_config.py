@@ -1,7 +1,7 @@
 import os
 
 EVENT_IDS_GGP7=os.getenv("EVENT_IDS_GGP7").split()
-print(EVENT_IDS_GGP7)
+#print(EVENT_IDS_GGP7)
 
 USER_IDS_CLASSIC=os.getenv("USER_IDS_CLASSIC")
 USER_IDS_ALLIN=os.getenv("USER_IDS_ALLIN")    
@@ -13,7 +13,7 @@ THREAD_IDS_ALLIN=os.getenv("THREAD_IDS_ALLIN")
 THREAD_ID_PACHINKO=os.getenv("THREAD_ID_PACHINKO")
 THREAD_ID_ROULETTE=os.getenv("THREAD_ID_ROULETTE")
 
-DIVISIONS_CLASSIC="novice master expert standard"
+DIVISIONS_CLASSIC="master expert standard"
 DIVISIONS_ALLIN="master expert"
 
 DIVISION_DICT = [

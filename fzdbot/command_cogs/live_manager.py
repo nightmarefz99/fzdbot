@@ -35,7 +35,7 @@ class LiveScoreboardManager(commands.Cog):
         if self.live_events is None:
             async with get_db_connection() as db:
                 self.live_events = await get_ggp7_events(db)
-                print(self.live_events)
+                #print(self.live_events)
 
         now = datetime.now(timezone.utc)
 
@@ -51,7 +51,7 @@ class LiveScoreboardManager(commands.Cog):
                 thread_ids = EVENT_STATIC_DATA[0]["thread_ids"].split()
                 user_ids = EVENT_STATIC_DATA[0]["user_ids"].split()
 
-                print(f"{ev_id} ===> {EVENT_STATIC_DATA}")           
+                #print(f"{ev_id} ===> {EVENT_STATIC_DATA}")           
                 # Event currently active
                 for thread_id, user_id in zip(thread_ids, user_ids):
                     if start <= now <= end:

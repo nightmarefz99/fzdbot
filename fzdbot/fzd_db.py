@@ -31,7 +31,7 @@ async def init_db_pool():
         'port': int(os.getenv("DB_PORT", 3306)),
         'autocommit': False
     }
-    POOL_SIZE = 6
+    POOL_SIZE = 16
     if _connection_pool is None:
         _connection_pool = await aiomysql.create_pool(
             minsize=1, maxsize=POOL_SIZE,
@@ -276,7 +276,7 @@ async def get_event_scoreboard(db, db_user_id: int, event_type=None):
     
     allscores = await execute_query(db, sql_getscoreboard, params=(eventinfo['id'],db_user_id), isProc=True)
 
-    print(allscores)
+    #print(allscores)
     # strip off is_qualified results if we're not viewing a qualifier event
     valid_qual_events = [8,9,10,11,12,13] # MM, Thu FZD, Fri FZD, EAD, CC, APAC
     if not eventinfo['event_id'] in valid_qual_events: 
