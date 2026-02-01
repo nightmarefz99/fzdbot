@@ -296,8 +296,8 @@ async def get_event_schedule(db):
 
 async def get_ggp7_events(db):
     EVENT_IDS_GGP7=os.getenv("EVENT_IDS_GGP7").split()
-    start_id=EVENT_IDS_GGP7[0]
-    end_id=EVENT_IDS_GGP7[3]
+    start_id=min(EVENT_IDS_GGP7)
+    end_id=max(EVENT_IDS_GGP7)
     sql_events="""SELECT es.event_id, e.name, es.utc_start_dt, es.utc_end_dt, es.scoring_method
                     FROM events_scheduled es
                     JOIN events e ON e.id = es.event_id

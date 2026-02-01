@@ -14,11 +14,11 @@ THREAD_ID_PACHINKO=os.getenv("THREAD_ID_PACHINKO")
 THREAD_ID_ROULETTE=os.getenv("THREAD_ID_ROULETTE")
 
 DIVISIONS_CLASSIC="master expert standard"
-DIVISIONS_ALLIN="master expert"
+DIVISIONS_ALLIN="TEST LIVE_EVENT"
 
 DIVISION_DICT = [
     {"id": EVENT_IDS_GGP7[0], "thread_ids": THREAD_IDS_CLASSIC, "user_ids": USER_IDS_CLASSIC, "divisions": DIVISIONS_CLASSIC},
-    {"id": EVENT_IDS_GGP7[1], "thread_ids": THREAD_ID_PACHINKO, "user_ids": USER_ID_PACHINKO, "divisions": "na"},
+    {"id": EVENT_IDS_GGP7[1], "thread_ids": THREAD_ID_PACHINKO, "user_ids": USER_ID_PACHINKO, "divisions": "LIVE_EVENT"},
     {"id": EVENT_IDS_GGP7[2], "thread_ids": THREAD_ID_ROULETTE, "user_ids": USER_ID_ROULETTE, "divisions": "na"},
     {"id": EVENT_IDS_GGP7[3], "thread_ids": THREAD_IDS_ALLIN,   "user_ids": USER_IDS_ALLIN,   "divisions": DIVISIONS_ALLIN}
 ]
