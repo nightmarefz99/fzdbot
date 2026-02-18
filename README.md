@@ -14,6 +14,11 @@ A discord bot that connects to the F-Zero Discord (FZD) database, with MySQL sup
 
 ## Setup
 
+### Requirements
+
+* Python on PATH
+* [uv](https://docs.astral.sh/uv/) installed: `pipx install uv` or `pip install uv`
+
 This project uses `uv` for dependency management.
 From the repository root:
 
