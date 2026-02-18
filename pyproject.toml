@@ -14,9 +14,22 @@ requires-python = ">=3.9"
 dependencies = [
     "discord.py>=2.0",
     "mysql-connector-python>=9.3,<10.0",
-    "python-dotenv>=1.0"
+    "python-dotenv>=1.0",
+]
+
+[dependency-groups]
+dev = ["ruff>=0.6.9"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 114
+extend-exclude = [
+    ".venv",
+    ".uv-cache",
+    ".ruff_cache",
+    ".pytest_cache",
+    "__pycache__",
 ]
 
 [project.scripts]
 fzdbot = "fzdbot.bot:main"
-

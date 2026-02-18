@@ -1,4 +1,5 @@
 # fzdbot
+
 A discord bot that connects to the F-Zero Discord (FZD) database, with MySQL support. It functions as an interface between discord and the database, useful for event scoreboards and statistics gathering from events.
 
 ---
@@ -11,27 +12,21 @@ A discord bot that connects to the F-Zero Discord (FZD) database, with MySQL sup
 
 ---
 
-## Installation
+## Setup
 
-### 1️⃣ Clone the repository
+This project uses `uv` for dependency management.
+From the repository root:
 
-```bash
-git clone https://github.com/nightmarefz99/fzdbot.git
-cd fzdbot
-```
-
----
-
-### 2️⃣ Set up a Python virtual environment (recommended)
+### Create & activate a virtual env
 
 ```bash
+uv sync --dev # This creates a venv at ./.venv and installs dependencies there
+
 # macOS/Linux
-python3 -m venv venv
-source venv/bin/activate
+source .venv/bin/activate
 
-# Windows
-python -m venv venv
-venv\Scripts\activate
+# Windows PowerShell
+.venv\Scripts\Activate.ps1
 ```
 
 Note after creating you only need to run the 2nd line to activate it (source venv/bin/activate or venv\Scripts\activate)
@@ -45,46 +40,13 @@ source venv/bin/activate
 
 ---
 
-### 3️⃣ Install dependencies
+### Configure environment variables
+
+The `.env.example` file shows how your .env file should be structured. Copy the contents to `.env` and populate the
+variables. This file will not be uploaded to the git repo
+
+### Run the bot
 
 ```bash
-pip install -e .
+uv run fzdbot
 ```
-
-* `-e` = editable mode; allows live changes without reinstalling.
-* This installs all dependencies listed in `pyproject.toml`.
-
----
-
-### 4️⃣ Configure environment variables
-
-Create `.env` file with your credentials:
-
-```env
-DISCORD_TOKEN=your_discord_bot_token_here
-SERVER_ID=id_of_server_where_bot_runs
-# Database connection
-DB_HOST=localhost
-DB_PORT=3306
-DB_USER=mydbuser
-DB_PASSWORD=supersecretpassword
-DB_NAME=mydatabase
-```
-
----
-
-### 5️⃣ Run the bot
-
-**Option 1 – entry point command:**
-
-```bash
-fzdbot
-```
-
-**Option 2 – module style:**
-
-```bash
-python -m fzdbot.bot
-```
-
-
