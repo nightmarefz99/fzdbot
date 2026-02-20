@@ -34,7 +34,7 @@ source .venv/bin/activate
 .venv\Scripts\Activate.ps1
 ```
 
-Note after creating you only need to run the 2nd line to activate it (source venv/bin/activate or venv\Scripts\activate)
+Note you will need to source the virtual environment to activate it and be able to run fzdbot below
 Optionally you can add it to your config file (e.g. ~/.bashrc) to automatically activate the virtual environment
 
 ```bash
