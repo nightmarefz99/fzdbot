@@ -13,7 +13,7 @@ from fzdbot.formatters import format_discord_timestamp
 from fzdbot.formatters import format_scoreboard_display_text
 from fzdbot.formatters import format_scoreboard_for_discord_embed
 from fzdbot.command_cogs.live_scoreboard import  LiveScoreboardTask
-# import fzdbot.live_config as LC # Gets DIVISION_DICT commented out due to dependency on not-present directory 
+import fzdbot.live_config as LC # Gets DIVISION_DICT
 
 class LiveScoreboardManager(commands.Cog):
     def __init__(self, bot):
