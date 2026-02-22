@@ -50,8 +50,6 @@ class Scoring(commands.Cog):
             # Get user id first, or add user if not registered in database
             async with get_db_connection() as db:
                 db_user_id = await get_user_id(db,interaction.user.name)
-                # machine_dict = await get_machines(db)
-                # machine_list = [s['name'] for s in machine_dict if 'name' in s]
                 machine_list = [s['name'] for s in self.machine_dict if 'name' in s]
                 if db_user_id is None:
                     await add_new_user(db, interaction.user, display_name=interaction.user.nick[0:10])
@@ -112,8 +110,6 @@ class Scoring(commands.Cog):
             # Get user id first, or add user if not registered in database
             async with get_db_connection() as db:
                 db_user_id = await get_user_id(db,interaction.user.name)
-                # machine_dict = await get_machines(db)
-                # machine_list = [s['name'] for s in machine_dict if 'name' in s]
                 machine_list = [s['name'] for s in self.machine_dict if 'name' in s]
                 if db_user_id is None:
                     await add_new_user(db, interaction.user, display_name=interaction.user.nick[0:10])
@@ -178,9 +174,6 @@ class Scoring(commands.Cog):
         return [app_commands.Choice(name=opt, value=f"{opt}|{idopt}") for opt, idopt in choices[:25]]
 
     async def machine_autocomplete(self, interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
-        # async with get_db_connection() as db:
-        #     machine_dict = await get_machines(db)
-        # machine_list = [s['name'] for s in machine_dict if 'name' in s]
         machine_list = [s['name'] for s in self.machine_dict if 'name' in s]
         options = [machine for machine in machine_list if current.lower() in machine.lower()]
         print(options)
