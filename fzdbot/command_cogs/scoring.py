@@ -72,7 +72,6 @@ class Scoring(commands.Cog):
                 #    await interaction.response.send_message(f"⚠️  Warning: Vehicle option required for this event. Score not added.", ephemeral=True)
                 else: 
                     if (vehicle != None):
-                        # vehicle_choice = next((item for item in machine_dict if vehicle in item.values()), None)
                         vehicle_choice = next((item for item in self.machine_dict if vehicle in item.values()), None)
                         vehicle_choice_id, vehicle_choice_name = vehicle_choice.values()
                     else:
@@ -131,7 +130,6 @@ class Scoring(commands.Cog):
                 #    await interaction.response.send_message(f"⚠️  Warning: Vehicle option required for this event. Score not added.", ephemeral=True)
                 else:
                     if (vehicle != None):
-                        # vehicle_choice = next((item for item in machine_dict if vehicle in item.values()), None)
                         vehicle_choice = next((item for item in self.machine_dict if vehicle in item.values()), None)
                         vehicle_choice_id, vehicle_choice_name = vehicle_choice.values()
                     else:
