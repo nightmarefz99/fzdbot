@@ -179,6 +179,8 @@ async def check_for_active_event(db, hours_from_now: int = 0):
         active_event['name'] = eventmatch['name']
         active_event['id']   = eventmatch['id']
         active_event['scoring_method'] = eventmatch['scoring_method']
+        # Commented out in anticipation of 'machine_required' bool column in 'events_scheduled' table in database
+        # active_event['machine_required'] = eventmatch['machine_required']
 
     return active_event
 
