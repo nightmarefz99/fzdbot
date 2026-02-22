@@ -304,3 +304,8 @@ async def get_ggp7_events(db):
                     WHERE event_id >= %s AND event_id <= %s"""
     events = await execute_query(db, sql_events, params=(start_id,end_id), fetch="all", isProc=False)
     return events
+
+async def get_machines(db):
+    sql_getmachines = "SELECT CAST(id AS CHAR) AS id, CAST(name AS CHAR) AS name FROM machines;"
+    machines_dict = await execute_query(db, sql_getmachines)
+    return machines_dict
