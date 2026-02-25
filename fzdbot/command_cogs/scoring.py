@@ -56,7 +56,7 @@ class Scoring(commands.Cog):
                     db_user_id = await get_user_id(db, interaction.user.name)
                     if db_user_id is None:
                         raise TypeError(f"Could not add new user {interaction.user}")
-            
+                
                 # check an event is active before adding data
                 current_event = await check_for_active_event(db)
                 if (current_event['name'] == "NULL"):
@@ -67,10 +67,9 @@ class Scoring(commands.Cog):
                     await interaction.response.send_message(f"⚠️  Warning: {current_event['name']} Team Event will be scored manually by FZD mods, do not submit scores to the bot!", ephemeral=True)
                 elif (vehicle not in machine_list) and (vehicle != None):
                     await interaction.response.send_message(f"⚠️  Warning: {vehicle} not one of the options {machine_list}. Score not added.", ephemeral=True)
-                # Commented out in anticipation of 'machine_required' bool column in 'events_scheduled' table in database
-                # elif (current_event.machine_required == True) and (vehicle != None):
-                #    await interaction.response.send_message(f"⚠️  Warning: Vehicle option required for this event. Score not added.", ephemeral=True)
-                else: 
+                elif (current_event['is_machine_input_required'] == True) and (vehicle == None):
+                   await interaction.response.send_message(f"⚠️  Warning: Vehicle option required for this event. Score not added.", ephemeral=True)
+                else:
                     if (vehicle != None):
                         vehicle_choice = next((item for item in self.machine_dict if vehicle in item.values()), None)
                         vehicle_choice_id, vehicle_choice_name = vehicle_choice.values()
@@ -118,16 +117,14 @@ class Scoring(commands.Cog):
 
                 # check an event is active before adding data
                 current_event = await check_for_active_event(db)
-                print(repr(current_event))
                 if (current_event['name'] == "NULL"):
                     await interaction.response.send_message(f"⚠️  Warning: No event is currently active, rank was not added!  ", ephemeral=True)
                 elif (current_event['scoring_method'] == "points"):
                     await interaction.response.send_message(f"⚠️  Warning: {current_event['name']} is normal scoring, please submit race/GP points using /fzd_add_score ", ephemeral=True)
                 elif (vehicle not in machine_list) and (vehicle != None):
                     await interaction.response.send_message(f"⚠️  Warning: {vehicle} not one of the options {machine_list}. Score not added.", ephemeral=True)
-                # Commented out in anticipation of 'machine_required' bool column in 'events_scheduled' table in database
-                # elif (current_event.machine_required == True) and (vehicle != None):
-                #    await interaction.response.send_message(f"⚠️  Warning: Vehicle option required for this event. Score not added.", ephemeral=True)
+                elif (current_event['is_machine_input_required'] == True) and (vehicle == None):
+                   await interaction.response.send_message(f"⚠️  Warning: Vehicle option required for this event. Score not added.", ephemeral=True)
                 else:
                     if (vehicle != None):
                         vehicle_choice = next((item for item in self.machine_dict if vehicle in item.values()), None)
@@ -174,7 +171,6 @@ class Scoring(commands.Cog):
     async def machine_autocomplete(self, interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
         machine_list = [s['name'] for s in self.machine_dict if 'name' in s]
         options = [machine for machine in machine_list if current.lower() in machine.lower()]
-        print(options)
 
         # Return up to 4 results (number of machines)
         return [app_commands.Choice(name=machine, value=f"{machine}") for machine in options[:4]]      
