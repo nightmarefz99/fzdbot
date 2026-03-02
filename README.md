@@ -22,6 +22,12 @@ A discord bot that connects to the F-Zero Discord (FZD) database, with MySQL sup
 This project uses `uv` for dependency management.
 From the repository root:
 
+### Clone the repository
+```bash
+git clone https://github.com/F-Zero-Discord/fzdbot.git
+cd fzdbot
+```
+
 ### Create & activate a virtual env
 
 ```bash

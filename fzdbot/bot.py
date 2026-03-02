@@ -49,7 +49,7 @@ class FZDBot(commands.Bot):
             print(f'Error syncing commands: {e}')
 
     async def on_ready(self) -> None:
-        await self.load_extension("fzdbot.command_cogs.live_manager")
+        #await self.load_extension("fzdbot.command_cogs.live_manager")
         print(f'✅ {self.user} is now running!')
 
 
