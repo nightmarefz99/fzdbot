@@ -67,7 +67,8 @@ class Scoreboard(commands.Cog):
                     scoreboard.set_thumbnail(url=thumbnail)
 
                     ranked_scoreboard = format_scoreboard_display_text(eventscoreslist)
-                    fields_display_text = format_scoreboard_for_discord_embed(ranked_scoreboard, max_num_lines=10)
+                    lines_per_block = int(os.getenv("SCOREBOARD_LINES_PER_BLOCK"))
+                    fields_display_text = format_scoreboard_for_discord_embed(ranked_scoreboard, max_num_lines=lines_per_block)
                     for i, block in enumerate(fields_display_text, start=1):
                         scoreboard.add_field(name="", value=block, inline=False)
 

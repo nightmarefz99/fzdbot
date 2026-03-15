@@ -1,6 +1,7 @@
 # This file contains format functions for displaying results from past events into discord,
 # mainly used in the "/show" command as of right now
 from datetime import datetime, timedelta, timezone
+import os
 #<:CupAPACChamp:1239639234500104235>
 #<:CupMachineChamp:1239640891526742036>
 #<:CupCrackChamp:1239639247582138440>
@@ -28,12 +29,16 @@ def format_scoreboard_display_text(allscores) -> list[str]:
          where each line contains rank, player name, and scores
          (with some other formatting/flair for a nice-looking scoreboard display)
     """
+
     qualemoji="<:LuckyRank:1213541741450231878>"
-    scoreboard=[]    
+    scoreboard=[]
+    isBelowPodium = False
+    display_podium = os.getenv("SCOREBOARD_DISPLAY_PODIUM", 'True').lower() in ('true', '1')
+
     if "is_qualified" in allscores[0] and any(d.get("is_qualified") == 1 for d in allscores):
        scoreboard.append(f"*{qualemoji} = already qualified for Team World*\n")
 
-    isBelowPodium = False
+    # Display team scores at the top
     team_names = {d['team'] for d in allscores}
     team_names.discard(None) # Remove any non-team entries
     if team_names: 
@@ -50,12 +55,14 @@ def format_scoreboard_display_text(allscores) -> list[str]:
                 rank = iscore + 1
             
             rankdisplay=" "+str(rank)+"\\."
-            if rank == 1:
-                rankdisplay="<:1st:1201576405339754546> " #emoji=":trophy: "
-            elif rank == 2:
-                rankdisplay="<:2nd:1201576409638903858> " #":second_place: "
-            elif rank == 3:
-                rankdisplay="<:3rd:1201576412444905653> " #":third_place: "
+
+            if display_podium:
+                if rank == 1:
+                    rankdisplay="<:1st:1201576405339754546> " #emoji=":trophy: "
+                elif rank == 2:
+                    rankdisplay="<:2nd:1201576409638903858> " #":second_place: "
+                elif rank == 3:
+                    rankdisplay="<:3rd:1201576412444905653> " #":third_place: "
             
             if not isBelowPodium and rank > 3:
                 isBelowPodium = True
@@ -68,6 +75,8 @@ def format_scoreboard_display_text(allscores) -> list[str]:
     
     rank=0
     last_score = None 
+
+    # Display individual player scores
     for iscore, entry in enumerate(allscores):
         player = entry['player']
         score = int(entry['score'])
@@ -75,12 +84,14 @@ def format_scoreboard_display_text(allscores) -> list[str]:
             rank = iscore + 1
 
         rankdisplay=str(rank)+"\\."
-        if rank == 1:
-            rankdisplay="<:1st:1201576405339754546> " #emoji=":trophy: "
-        elif rank == 2:
-            rankdisplay="<:2nd:1201576409638903858> " #":second_place: "
-        elif rank == 3:
-            rankdisplay="<:3rd:1201576412444905653> " #":third_place: "
+
+        if display_podium:
+            if rank == 1:
+                rankdisplay="<:1st:1201576405339754546> " #emoji=":trophy: "
+            elif rank == 2:
+                rankdisplay="<:2nd:1201576409638903858> " #":second_place: "
+            elif rank == 3:
+                rankdisplay="<:3rd:1201576412444905653> " #":third_place: "
         
         if team_names:
             rankdisplay=f"{entry['team']}: "
@@ -91,9 +102,10 @@ def format_scoreboard_display_text(allscores) -> list[str]:
         if "is_qualified" in entry and entry["is_qualified"] == 1:
             qualdisplay=f"{qualemoji} "
 
-        if not team_names and not isBelowPodium and rank > 3:
-            scoreboard.append("======================")
-            isBelowPodium = True
+        if display_podium: 
+            if not team_names and not isBelowPodium and rank > 3:
+                scoreboard.append("======================")
+                isBelowPodium = True
         
         # If we don't escape the dot ("\\.") discord might see the rank as markdown text 
         # And weird behavior could happen as a result
@@ -114,7 +126,11 @@ def format_scoreboard_for_discord_embed(lines: list[str],
     curstr = ""
     formatted_fields = []
     linecount: int = 0
-    maxlines: int = max_num_lines + 1 # Accounts for added line of "=" in formatting of podium
+    display_podium = display_podium = os.getenv("SCOREBOARD_DISPLAY_PODIUM", 'True').lower() in ('true', '1')
+    maxlines: int = max_num_lines
+    if display_podium: 
+        maxlines += 1 # Accounts for added line of "=" in formatting of podium
+
     for line in lines:
         if (len(curstr) + len(line) + 1 > max_field_length or linecount >= maxlines ):               
             formatted_fields.append(curstr)
