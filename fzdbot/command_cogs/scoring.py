@@ -50,8 +50,6 @@ class Scoring(commands.Cog):
                     await interaction.response.send_message(f"⚠️  Warning: No event is currently active, score was not added!  ", ephemeral=True)
                 elif (current_event['scoring_method'] != "points"):
                     await interaction.response.send_message(f"⚠️  Warning: {current_event['name']} requires rank results, please use /fzd_add_rank ", ephemeral=True)
-                elif (current_event['name'] == "GGP7 - Roulette"):
-                    await interaction.response.send_message(f"⚠️  Warning: {current_event['name']} Team Event will be scored manually by FZD mods, do not submit scores to the bot!", ephemeral=True)
                 else: 
                     user_data = [db_user_id, current_event['id'], int(score), current_event['scoring_method']] 
                     return_score = await submit_score(db, user_data) #interaction.user
@@ -218,13 +216,20 @@ class Scoring(commands.Cog):
                     await interaction.response.send_message(f"⚠️  Are you sure you want to delete '{score}' from your scores?",
                                                         view=view,  ephemeral=True
                                                         )
-                    await view.wait() # Wait for user to make choice
+                            
+                    timed_out = await view.wait()
+                    if timed_out or view.confirmed is None:
+                        await interaction.followup.send("Timed out — no changes were made.", ephemeral=True)
+                        return
                     if view.confirmed:
                         await delete_score(db,[idchoice])
                         await interaction.followup.send(
                               content=f"✅ User {interaction.user.name} has successfully deleted '{score}' from their submitted scores",
                               ephemeral=False
                               )
+                    else:
+                        await interaction.followup.send("Cancelled — no changes were made.", ephemeral=True)
+
         except Exception as e:
             print(f"Exception in deleteScore: {e}")
             await interaction.response.send_message(

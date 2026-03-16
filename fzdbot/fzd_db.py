@@ -293,14 +293,3 @@ async def get_event_schedule(db):
     #print(events)
     #print(type(events))
     return events
-
-async def get_ggp7_events(db):
-    EVENT_IDS_GGP7=os.getenv("EVENT_IDS_GGP7").split()
-    start_id=min(EVENT_IDS_GGP7)
-    end_id=max(EVENT_IDS_GGP7)
-    sql_events="""SELECT es.event_id, e.name, es.utc_start_dt, es.utc_end_dt, es.scoring_method
-                    FROM events_scheduled es
-                    JOIN events e ON e.id = es.event_id
-                    WHERE event_id >= %s AND event_id <= %s"""
-    events = await execute_query(db, sql_events, params=(start_id,end_id), fetch="all", isProc=False)
-    return events

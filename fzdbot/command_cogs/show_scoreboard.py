@@ -1,6 +1,7 @@
 # Cog class for displaying scoreboard results using bot (/show command)
 
 import os
+import traceback
 from datetime import timezone
 import discord
 from discord.ext import commands
@@ -10,7 +11,6 @@ from fzdbot.fzd_db import get_db_connection #connect_to_database
 from fzdbot.fzd_db import get_event_types
 from fzdbot.fzd_db import get_event_scoreboard
 from fzdbot.fzd_db import get_user_id
-from fzdbot.fzd_db import get_ggp7_events
 from fzdbot.formatters import format_discord_timestamp
 from fzdbot.formatters import format_scoreboard_display_text
 from fzdbot.formatters import format_scoreboard_for_discord_embed
@@ -35,8 +35,6 @@ class Scoreboard(commands.Cog):
             async with get_db_connection() as db:
                 db_user_id = await get_user_id(db,interaction.user.name)
                 eventinfo, eventscoreslist = await get_event_scoreboard(db, db_user_id, event_type=event_type)
-                ggp7_events = await get_ggp7_events(db)
-                print(ggp7_events)
             
             if not eventinfo: 
                 if event_type:
@@ -73,11 +71,22 @@ class Scoreboard(commands.Cog):
 
                 await interaction.response.send_message(embed=scoreboard)
         except Exception as e:
-            await interaction.response.send_message(
-                          f"❌ ERROR! Something unexpected went wrong, contact an FZD mod to help!",
-                          ephemeral=True
-                          ) 
-            print(f"[showScoreboard] Exception {repr(e)}")
+            print(
+                f"[showScoreboard] Exception user={interaction.user!r} "
+                f"event_type={event_type!r} "
+                f"error={repr(e)}"
+            )
+            print(traceback.format_exc())
+            if interaction.response.is_done():
+                await interaction.followup.send(
+                    f"❌ ERROR! Something unexpected went wrong, contact an FZD mod to help!",
+                    ephemeral=True
+                )
+            else:
+                await interaction.response.send_message(
+                    f"❌ ERROR! Something unexpected went wrong, contact an FZD mod to help!",
+                    ephemeral=True
+                )
     
     async def cog_load(self):
         # Bind autocomplete handler properly
