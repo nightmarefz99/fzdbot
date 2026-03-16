@@ -16,6 +16,16 @@ logger = logging.getLogger(__name__)
 _connection_pool = None
 
 
+async def _safe_rollback(conn, source: str = "unknown") -> None:
+    """Rollback only when possible; never mask the original exception."""
+    if not conn or getattr(conn, "closed", True):
+        return
+    try:
+        await conn.rollback()
+    except aiomysql.Error as rollback_error:
+        logger.warning(f"[DB] Rollback skipped ({source}): {rollback_error}")
+
+
 async def init_db_pool():
     global _connection_pool
     settings = get_settings()
@@ -34,11 +44,19 @@ async def get_connection_from_pool():
     """
     global _connection_pool
     conn = None
+    if _connection_pool is None:
+        raise RuntimeError("Database pool is not initialized")
+
     try:
         conn = await _connection_pool.acquire()
-        logger.info("[DB] Got connection from pool: id=%s", id(conn))
-    except aiomysql.Error:
-        logger.warning("[DB CONNECTION] POOL IS DEAD...")
+        await conn.ping(reconnect=True)
+        logger.debug("[DB] Got connection from pool: id=%s", id(conn))
+    except Exception as e:
+        logger.warning(f"[DB CONNECTION] Failed to get healthy pooled connection: {e}")
+        if conn:
+            conn.close()
+            _connection_pool.release(conn)
+        raise
     return conn
 
 
@@ -46,7 +64,7 @@ async def get_connection_from_pool():
 async def get_db_connection():
     """
     Context manager for safely acquiring and releasing a DB connection.
-    Rolls back on error and retries once if connection is lost.
+    Rolls back on error when possible and always releases the connection.
     """
     conn = None
     try:
@@ -57,8 +75,8 @@ async def get_db_connection():
         yield conn  # hand off to the calling code
 
     except aiomysql.Error as e:
-        await conn.rollback()
-        logger.error("[DB ERROR] Rolled back transaction: %s", e)
+        await _safe_rollback(conn, source="get_db_connection")
+        logger.error("[DB ERROR] %s", e)
         raise  # propagate error up to cog
 
     finally:
@@ -93,7 +111,7 @@ async def execute_query(conn, query, params=None, fetch="all", isProc: bool = Fa
             return result
 
         except Exception as e:
-            await conn.rollback()
+            await _safe_rollback(conn, source="execute_query")
             logger.error(f"[DB QUERY ERROR]: {e}\nQuery: {query}\nParams: {params}")
             raise
 
