@@ -14,12 +14,24 @@ from fzdbot.fzd_db import check_for_active_event
 from fzdbot.fzd_db import submit_score
 from fzdbot.fzd_db import edit_score
 from fzdbot.fzd_db import delete_score
+from fzdbot.fzd_db import get_machines # to pull machine info from db
 from fzdbot.views.confirm_delete import ConfirmDeleteScore
 
 class Scoring(commands.Cog):
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot: commands.Bot, machine_dict: list[dict]):
         self.bot = bot
-
+        self.machine_dict = machine_dict
+    
+    # =============================================================================================================
+    #   grab_machines: used to pull the list of machine (dictionaries) upon initialization
+    #       (asynchronous factory method)
+    # ============================================================================================================= 
+    
+    @classmethod
+    async def grab_machines(self) -> list:
+        async with get_db_connection() as db:
+            return await get_machines(db)
+        
     # =============================================================================================================
     #   /add_score 
     # ============================================================================================================= 
@@ -27,7 +39,7 @@ class Scoring(commands.Cog):
     # Add a score to an event
     @app_commands.command(name="fzd_add_score", description="Add score to FZD scoreboard database") #, guild=GUILD_ID)
     @app_commands.describe(score="Enter an integer value for the score during an event")
-    async def add_score(self, interaction: discord.Interaction, score: str):
+    async def add_score(self, interaction: discord.Interaction, score: str, vehicle: str = None):
         maxscore = 1000000 # arbitrarily set for now
         try:
             if int(score) < 0:
@@ -38,12 +50,13 @@ class Scoring(commands.Cog):
             # Get user id first, or add user if not registered in database
             async with get_db_connection() as db:
                 db_user_id = await get_user_id(db,interaction.user.name)
+                machine_list = [s['name'] for s in self.machine_dict if 'name' in s]
                 if db_user_id is None:
                     await add_new_user(db, interaction.user, display_name=interaction.user.nick[0:10])
                     db_user_id = await get_user_id(db, interaction.user.name)
                     if db_user_id is None:
                         raise TypeError(f"Could not add new user {interaction.user}")
-            
+                
                 # check an event is active before adding data
                 current_event = await check_for_active_event(db)
                 if (current_event['name'] == "NULL"):
@@ -52,11 +65,21 @@ class Scoring(commands.Cog):
                     await interaction.response.send_message(f"⚠️  Warning: {current_event['name']} requires rank results, please use /fzd_add_rank ", ephemeral=True)
                 elif (current_event['name'] == "GGP7 - Roulette"):
                     await interaction.response.send_message(f"⚠️  Warning: {current_event['name']} Team Event will be scored manually by FZD mods, do not submit scores to the bot!", ephemeral=True)
-                else: 
-                    user_data = [db_user_id, current_event['id'], int(score), current_event['scoring_method']] 
+                elif (vehicle not in machine_list) and (vehicle != None):
+                    await interaction.response.send_message(f"⚠️  Warning: {vehicle} not one of the options {machine_list}. Score not added.", ephemeral=True)
+                elif (current_event['is_machine_input_required'] == True) and (vehicle == None):
+                   await interaction.response.send_message(f"⚠️  Warning: Vehicle option required for this event. Score not added.", ephemeral=True)
+                else:
+                    if (vehicle != None):
+                        vehicle_choice = next((item for item in self.machine_dict if vehicle in item.values()), None)
+                        vehicle_choice_id, vehicle_choice_name = vehicle_choice.values()
+                    else:
+                        vehicle_choice_id = None
+                        vehicle_choice_name = None
+                    user_data = [db_user_id, current_event['id'], int(score), current_event['scoring_method'], vehicle_choice_id] 
                     return_score = await submit_score(db, user_data) #interaction.user
-                    await interaction.response.send_message(f"✅ User {interaction.user} has entered a score of {return_score} to {current_event['name']}") #, ephemeral=True)
-                    print(f"✅ User {interaction.user.nick} has entered a score of {score} to {current_event['name']}")
+                    await interaction.response.send_message(f"✅ User {interaction.user} has entered a score of {return_score} to {current_event['name']} using vehicle {vehicle_choice_name}") #, ephemeral=True)
+                    print(f"✅ User {interaction.user.nick} has entered a score of {score} to {current_event['name']} and vehicle {vehicle_choice_name}")
 
         except ValueError as ve: # should catch negative numbers and any errors with int(score) if score is not a base 10 integer
             await interaction.response.send_message(f"❌ ERROR! 'score' must be entered as a positive integer!  ", ephemeral=True) 
@@ -76,7 +99,7 @@ class Scoring(commands.Cog):
     # Add a score to an event
     @app_commands.command(name="fzd_add_rank", description="Add rank placement to FZD scoreboard (i.e. for Kingmaker events)") #, guild=GUILD_ID)
     @app_commands.describe(rank="Enter an integer value for the placement rank (1-99) during an event")
-    async def add_rank(self, interaction: discord.Interaction, rank: str):
+    async def add_rank(self, interaction: discord.Interaction, rank: str, vehicle: str = None):
         maxrank = 99 
         try:
             if int(rank) < 1 or int(rank) > maxrank:
@@ -85,6 +108,7 @@ class Scoring(commands.Cog):
             # Get user id first, or add user if not registered in database
             async with get_db_connection() as db:
                 db_user_id = await get_user_id(db,interaction.user.name)
+                machine_list = [s['name'] for s in self.machine_dict if 'name' in s]
                 if db_user_id is None:
                     await add_new_user(db, interaction.user, display_name=interaction.user.nick[0:10])
                     db_user_id = await get_user_id(db, interaction.user.name)
@@ -93,16 +117,25 @@ class Scoring(commands.Cog):
 
                 # check an event is active before adding data
                 current_event = await check_for_active_event(db)
-                print(repr(current_event))
                 if (current_event['name'] == "NULL"):
                     await interaction.response.send_message(f"⚠️  Warning: No event is currently active, rank was not added!  ", ephemeral=True)
                 elif (current_event['scoring_method'] == "points"):
                     await interaction.response.send_message(f"⚠️  Warning: {current_event['name']} is normal scoring, please submit race/GP points using /fzd_add_score ", ephemeral=True)
+                elif (vehicle not in machine_list) and (vehicle != None):
+                    await interaction.response.send_message(f"⚠️  Warning: {vehicle} not one of the options {machine_list}. Score not added.", ephemeral=True)
+                elif (current_event['is_machine_input_required'] == True) and (vehicle == None):
+                   await interaction.response.send_message(f"⚠️  Warning: Vehicle option required for this event. Score not added.", ephemeral=True)
                 else:
-                    user_data = [db_user_id, current_event['id'], int(rank), current_event['scoring_method']]
+                    if (vehicle != None):
+                        vehicle_choice = next((item for item in self.machine_dict if vehicle in item.values()), None)
+                        vehicle_choice_id, vehicle_choice_name = vehicle_choice.values()
+                    else:
+                        vehicle_choice_id = None
+                        vehicle_choice_name = None
+                    user_data = [db_user_id, current_event['id'], int(rank), current_event['scoring_method'], vehicle_choice_id]
                     return_score = await submit_score(db, user_data) #interaction.user
-                    await interaction.response.send_message(f"✅ User {interaction.user} has entered rank {rank} → {return_score} points have been added to {current_event['name']}") #, ephemeral=True)
-                    print(f"✅ User {interaction.user.nick} has entered a score of {rank},  {return_score} to {current_event['name']}")
+                    await interaction.response.send_message(f"✅ User {interaction.user} has entered rank {rank} → {return_score} points have been added to {current_event['name']} using vehicle {vehicle_choice_name}") #, ephemeral=True)
+                    print(f"✅ User {interaction.user.nick} has entered a score of {rank},  {return_score} and vehicle {vehicle_choice_name} to {current_event['name']}")
 
         except ValueError as ve: # should catch negative numbers and any errors with int(score) if score is not a base 10 integer
             await interaction.response.send_message(f"❌ ERROR! 'rank' must be between 1 and 99!  ", ephemeral=True)
@@ -133,7 +166,14 @@ class Scoring(commands.Cog):
         # Filter based on what the user is currently typing
         choices = [(opt['score'], opt['id']) for opt in user_scores if current.lower() in opt['score'].lower()]
         # Return up to 25 results (discord limit)
-        return [app_commands.Choice(name=opt, value=f"{opt}|{idopt}") for opt, idopt in choices[:25]]    
+        return [app_commands.Choice(name=opt, value=f"{opt}|{idopt}") for opt, idopt in choices[:25]]
+
+    async def machine_autocomplete(self, interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+        machine_list = [s['name'] for s in self.machine_dict if 'name' in s]
+        options = [machine for machine in machine_list if current.lower() in machine.lower()]
+
+        # Return up to 4 results (number of machines)
+        return [app_commands.Choice(name=machine, value=f"{machine}") for machine in options[:4]]      
 
     # =============================================================================================================
     #   /edit_score 
@@ -238,7 +278,10 @@ class Scoring(commands.Cog):
     async def cog_load(self):
         self.editScore.autocomplete("old_score")(self.user_scores_autocomplete_nokingmaker) 
         self.deleteScore.autocomplete("score_to_delete")(self.user_scores_autocomplete)
+        self.add_score.autocomplete("vehicle")(self.machine_autocomplete)
+        self.add_rank.autocomplete("vehicle")(self.machine_autocomplete)
 
 async def setup(bot: commands.Bot):
     GUILD_ID=discord.Object(id=os.getenv('SERVER_ID'))
-    await bot.add_cog(Scoring(bot), guild=GUILD_ID)
+    machine_dict = await Scoring.grab_machines()
+    await bot.add_cog(Scoring(bot, machine_dict), guild=GUILD_ID)

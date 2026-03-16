@@ -169,7 +169,7 @@ async def check_for_active_event(db, hours_from_now: int = 0):
         event is active right now, returns dict with name and id
     """
     active_event = {'name':"NULL",'id':0} # Assume no match
-    sql_getevent="""SELECT es.id, e.name, es.utc_start_dt, es.utc_end_dt, es.scoring_method
+    sql_getevent="""SELECT es.id, e.name, es.utc_start_dt, es.utc_end_dt, es.scoring_method, es.is_machine_input_required
                     FROM events_scheduled es
                     JOIN events e ON e.id = es.event_id
                     WHERE DATE_ADD(UTC_TIMESTAMP(), INTERVAL %s HOUR) 
@@ -179,6 +179,14 @@ async def check_for_active_event(db, hours_from_now: int = 0):
         active_event['name'] = eventmatch['name']
         active_event['id']   = eventmatch['id']
         active_event['scoring_method'] = eventmatch['scoring_method']
+        try:
+            temp_var = int.from_bytes(eventmatch['is_machine_input_required']) # byteint -> int[0 or 1]
+            if temp_var == 1:
+                active_event['is_machine_input_required'] = True
+            elif temp_var == 0:
+                active_event['is_machine_input_required'] = False
+        except Exception as e:
+            print(f"Exception in importing is_machine_input_required encountered! {e}")
 
     return active_event
 
@@ -304,3 +312,8 @@ async def get_ggp7_events(db):
                     WHERE event_id >= %s AND event_id <= %s"""
     events = await execute_query(db, sql_events, params=(start_id,end_id), fetch="all", isProc=False)
     return events
+
+async def get_machines(db):
+    sql_getmachines = "SELECT CAST(id AS CHAR) AS id, CAST(name AS CHAR) AS name FROM machines;"
+    machines_dict = await execute_query(db, sql_getmachines)
+    return machines_dict
