@@ -34,9 +34,9 @@ class FZDBot(commands.Bot):
         # Load all cogs from /command_cogs folder
         try:
             self.db_pool = await init_db_pool()
-            await self.load_extension("fzdbot.command_cogs.show_scoreboard")
-            await self.load_extension("fzdbot.command_cogs.scoring")
-            await self.load_extension("fzdbot.command_cogs.events_users_handling")
+            await self.load_extension("fzdbot.cogs.show_scoreboard")
+            await self.load_extension("fzdbot.cogs.scoring")
+            await self.load_extension("fzdbot.cogs.events_users_handling")
             print("✅ Loaded extensions")
         except Exception as e:
             print(f"Failed to load extensions: {e}")
