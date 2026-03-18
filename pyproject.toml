@@ -20,7 +20,7 @@ dependencies = [
 ]
 
 [project.scripts]
-fzdbot = "fzdbot.main:main"
+fzdbot = "fzdbot.bot:main"
 
 [dependency-groups]
 dev = ["ruff>=0.6.9"]

@@ -2,18 +2,18 @@
 #         /add_score, /edit_score, /delete_score
 
 import logging
-import discord
 from discord.ext import commands
 from discord import app_commands
+import discord
 
-from fzdbot.fzd_db import get_db_connection  # connect_to_database
-from fzdbot.fzd_db import get_user_id
-from fzdbot.fzd_db import get_user_scores
-from fzdbot.fzd_db import add_new_user
-from fzdbot.fzd_db import check_for_active_event
-from fzdbot.fzd_db import submit_score
-from fzdbot.fzd_db import edit_score
-from fzdbot.fzd_db import delete_score
+from fzdbot.db import add_new_user
+from fzdbot.db import check_for_active_event
+from fzdbot.db import delete_score
+from fzdbot.db import edit_score
+from fzdbot.db import get_db_connection
+from fzdbot.db import get_user_id
+from fzdbot.db import get_user_scores
+from fzdbot.db import submit_score
 from fzdbot.settings import get_settings
 from fzdbot.views.confirm_delete import ConfirmDeleteScore
 
@@ -54,7 +54,7 @@ class Scoring(commands.Cog):
                 current_event = await check_for_active_event(db)
                 if current_event["name"] == "NULL":
                     await interaction.response.send_message(
-                        f"⚠️  Warning: No event is currently active, score was not added!  ", ephemeral=True
+                        "⚠️  Warning: No event is currently active, score was not added!  ", ephemeral=True
                     )
                 elif current_event["scoring_method"] != "points":
                     await interaction.response.send_message(
@@ -76,23 +76,23 @@ class Scoring(commands.Cog):
 
         except (
             ValueError
-        ) as ve:  # should catch negative numbers and any errors with int(score) if score is not a base 10 integer
+        ):  # should catch negative numbers and any errors with int(score) if score is not a base 10 integer
             await interaction.response.send_message(
-                f"❌ ERROR! 'score' must be entered as a positive integer!  ", ephemeral=True
+                "❌ ERROR! 'score' must be entered as a positive integer!  ", ephemeral=True
             )
-        except OverflowError as oe:
+        except OverflowError:
             await interaction.response.send_message(
                 f"❌ ERROR! 'score' should not be larger tnan {maxscore}. Please be nice to Nightmare's bot.",
                 ephemeral=True,
             )
-        except TypeError as te:
+        except TypeError:
             await interaction.response.send_message(
-                f"❌ ERROR! Could not add you to the database. Try the '/fzd_register' command, or contact FZD staff for help.",
+                "❌ ERROR! Could not add you to the database. Try the '/fzd_register' command, or contact FZD staff for help.",
                 ephemeral=True,
             )
         except Exception:
             await interaction.response.send_message(
-                f"❌ ERROR! Something went wrong, contact FZD staff for help! ", ephemeral=True
+                "❌ ERROR! Something went wrong, contact FZD staff for help! ", ephemeral=True
             )
             logger.exception("Exception in add_score for user=%s", interaction.user)
 
@@ -125,7 +125,7 @@ class Scoring(commands.Cog):
                 logger.debug("add_rank current_event=%r", current_event)
                 if current_event["name"] == "NULL":
                     await interaction.response.send_message(
-                        f"⚠️  Warning: No event is currently active, rank was not added!  ", ephemeral=True
+                        "⚠️  Warning: No event is currently active, rank was not added!  ", ephemeral=True
                     )
                 elif current_event["scoring_method"] == "points":
                     await interaction.response.send_message(
@@ -148,18 +148,18 @@ class Scoring(commands.Cog):
 
         except (
             ValueError
-        ) as ve:  # should catch negative numbers and any errors with int(score) if score is not a base 10 integer
+        ):  # should catch negative numbers and any errors with int(score) if score is not a base 10 integer
             await interaction.response.send_message(
-                f"❌ ERROR! 'rank' must be between 1 and 99!  ", ephemeral=True
+                "❌ ERROR! 'rank' must be between 1 and 99!  ", ephemeral=True
             )
-        except TypeError as te:
+        except TypeError:
             await interaction.response.send_message(
-                f"❌ ERROR! Could not add you to the database. Try the '/fzd_register' command, or contact FZD staff for help.",
+                "❌ ERROR! Could not add you to the database. Try the '/fzd_register' command, or contact FZD staff for help.",
                 ephemeral=True,
             )
         except Exception:
             await interaction.response.send_message(
-                f"❌ ERROR! Something went wrong, contact FZD staff for help! ", ephemeral=True
+                "❌ ERROR! Something went wrong, contact FZD staff for help! ", ephemeral=True
             )
             logger.exception("Exception in add_rank for user=%s", interaction.user)
 
@@ -205,7 +205,7 @@ class Scoring(commands.Cog):
 
                 if score == "NO CURRENT EVENT":
                     await interaction.response.send_message(
-                        f"⚠️   No current event active, can't edit scores! If you need help, contact an FZD mod",
+                        "⚠️   No current event active, can't edit scores! If you need help, contact an FZD mod",
                         ephemeral=True,
                     )
                 elif score == "NO USER SCORES FOUND":
@@ -258,7 +258,7 @@ class Scoring(commands.Cog):
 
                 if score == "NO CURRENT EVENT":
                     await interaction.response.send_message(
-                        f"⚠️   No current event active, can't edit scores! If you need help, contact an FZD mod",
+                        "⚠️   No current event active, can't edit scores! If you need help, contact an FZD mod",
                         ephemeral=True,
                     )
                 elif score == "NO USER SCORES FOUND":

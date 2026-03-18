@@ -11,7 +11,7 @@ class ConfirmDeleteScore(discord.ui.View):
     async def confirm_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.confirmed = True
         self.stop() # Stop listening for further interactions
-        await interaction.response.edit_message(content=f"Score deleted.", view=None) # Remove buttons
+        await interaction.response.edit_message(content="Score deleted.", view=None) # Remove buttons
         #await interaction.followup.send(content=f"✅ User {interaction.user.name} has successfully deleted '{self.score}' from their submitted scores", ephemeral=False)
 
     @discord.ui.button(label="No", style=discord.ButtonStyle.red)
