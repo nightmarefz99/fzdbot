@@ -3,34 +3,25 @@ import sys
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+ENV_FILES = (str(REPO_ROOT / ".env"), ".env")
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=str(REPO_ROOT / ".env"), extra="ignore")
+    model_config = SettingsConfigDict(env_file=ENV_FILES, extra="ignore")
 
-    discord_token: str = Field(validation_alias="DISCORD_TOKEN")
-    server_id: int = Field(validation_alias="SERVER_ID")
+    discord_token: str
+    server_id: int
 
-    db_user: str = Field(validation_alias="DB_USER")
-    db_password: str = Field(validation_alias="DB_PASSWORD")
-    db_name: str = Field(validation_alias="DB_NAME")
-    db_host: str = Field(default="localhost", validation_alias="DB_HOST")
-    db_port: int = Field(default=3306, validation_alias="DB_PORT")
+    db_user: str
+    db_password: str
+    db_name: str
+    db_host: str = "localhost"
+    db_port: int = 3306
 
-    log_level: str = Field(default="INFO", validation_alias="FZDBOT_LOG_LEVEL")
-
-    @field_validator("log_level")
-    @classmethod
-    def validate_log_level(cls, value: str) -> str:
-        valid_levels = {"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET"}
-        normalized = value.upper()
-        if normalized not in valid_levels:
-            raise ValueError(f"Invalid log level: {value}")
-        return normalized
+    log_level: str = "INFO"
 
     @property
     def db_config(self) -> dict[str, object]:
@@ -52,7 +43,7 @@ def get_settings() -> Settings:
 def configure_logging() -> None:
     settings = get_settings()
     logging.basicConfig(
-        level=settings.log_level,
+        level=settings.log_level.upper(),
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
         stream=sys.stdout,
     )
