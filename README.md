@@ -23,6 +23,7 @@ This project uses `uv` for dependency management.
 From the repository root:
 
 ### Clone the repository
+
 ```bash
 git clone https://github.com/F-Zero-Discord/fzdbot.git
 cd fzdbot
@@ -55,6 +56,39 @@ source venv/bin/activate
 
 The `.env.example` file shows how your .env file should be structured. Copy the contents to `.env` and populate the
 variables. This file will not be uploaded to the git repo
+
+### Settings behavior (required vs defaulted vs empty)
+
+`src/fzdbot/settings.py` loads values from `.env` into strongly typed settings.
+
+Required settings (no default in code):
+
+* `DISCORD_TOKEN`
+* `SERVER_ID`
+* `DB_USER`
+* `DB_PASSWORD`
+* `DB_NAME`
+
+Defaulted settings (used automatically if missing from `.env`):
+
+* `DB_HOST` defaults to `localhost`
+* `DB_PORT` defaults to `3306`
+* `LOG_LEVEL` defaults to `INFO`
+* `SCOREBOARD_DISPLAY_PODIUM` defaults to `true`
+* `SCOREBOARD_LINES_PER_BLOCK` defaults to `8`
+
+What happens when values are missing or empty:
+
+* Missing required setting: bot startup fails with a settings validation error.
+* Missing defaulted setting: code uses the default value above.
+* Empty value for typed settings like `int`/`bool`: startup fails with a validation error.
+* Empty value for required strings: validation passes, but runtime behavior will likely fail later (for example DB auth).
+
+## Day-to-Day Workflow
+
+* Sync dependencies with `uv sync --dev`.
+* Run lint fixes and import sorting with `uv run ruff check . --fix`.
+* Run formatting with `uv run ruff format .`.
 
 ### Run the bot
 

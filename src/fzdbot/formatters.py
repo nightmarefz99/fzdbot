@@ -1,7 +1,7 @@
 # This file contains format functions for displaying results from past events into discord,
 # mainly used in the "/show" command as of right now
 from datetime import datetime, timedelta, timezone
-import os
+from fzdbot.settings import get_settings
 #<:CupAPACChamp:1239639234500104235>
 #<:CupMachineChamp:1239640891526742036>
 #<:CupCrackChamp:1239639247582138440>
@@ -33,7 +33,7 @@ def format_scoreboard_display_text(allscores) -> list[str]:
     qualemoji="<:LuckyRank:1213541741450231878>"
     scoreboard=[]
     isBelowPodium = False
-    display_podium = os.getenv("SCOREBOARD_DISPLAY_PODIUM", 'True').lower() in ('true', '1')
+    display_podium = get_settings().scoreboard_display_podium
 
     if "is_qualified" in allscores[0] and any(d.get("is_qualified") == 1 for d in allscores):
        scoreboard.append(f"*{qualemoji} = already qualified for Team World*\n")
@@ -126,7 +126,7 @@ def format_scoreboard_for_discord_embed(lines: list[str],
     curstr = ""
     formatted_fields = []
     linecount: int = 0
-    display_podium = display_podium = os.getenv("SCOREBOARD_DISPLAY_PODIUM", 'True').lower() in ('true', '1')
+    display_podium = get_settings().scoreboard_display_podium
     maxlines: int = max_num_lines
     if display_podium: 
         maxlines += 1 # Accounts for added line of "=" in formatting of podium
@@ -167,4 +167,3 @@ def format_events_schedule(events):
         curstr += event + ": "+start+ " \n "
     formatted_fields.append(curstr)
     return formatted_fields
-

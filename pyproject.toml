@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
 
 [project]
 name = "fzdbot"
@@ -10,16 +10,23 @@ readme = "README.md"
 license = { file = "LICENSE" }
 authors = [{ name = "Nightmare", email = "tromnick@yahoo.com" }]
 requires-python = ">=3.9"
-
 dependencies = [
     "discord.py>=2.0",
     "aiomysql>=0.2.0",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
     "python-dotenv>=1.0",
     "cryptography",
 ]
 
+[project.scripts]
+fzdbot = "fzdbot.main:main"
+
 [dependency-groups]
 dev = ["ruff>=0.6.9"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fzdbot"]
 
 [tool.ruff]
 target-version = "py312"
@@ -31,6 +38,3 @@ extend-exclude = [
     ".pytest_cache",
     "__pycache__",
 ]
-
-[project.scripts]
-fzdbot = "fzdbot.bot:main"
