@@ -48,8 +48,6 @@ class Scoreboard(commands.Cog):
         logger.debug("[showScoreboard] Invoked by %s with event_type=%s", interaction.user, event_type)
         try:
             await interaction.response.defer()
-            if event_type == "trigger_error":
-                raise RuntimeError("Deliberate error in fzd_show for alert testing")
             async with get_db_connection() as db:
                 db_user_id = await get_user_id(db, interaction.user.name)
                 eventinfo, eventscoreslist = await get_event_scoreboard(db, db_user_id, event_type=event_type)
