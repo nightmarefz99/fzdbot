@@ -7,6 +7,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from fzdbot.error_alerts import send_error_alert
 from fzdbot.formatters import (
     format_discord_timestamp,
     format_scoreboard_display_text,
@@ -47,6 +48,8 @@ class Scoreboard(commands.Cog):
         logger.debug("[showScoreboard] Invoked by %s with event_type=%s", interaction.user, event_type)
         try:
             await interaction.response.defer()
+            if event_type == "trigger_error":
+                raise RuntimeError("Deliberate error in fzd_show for alert testing")
             async with get_db_connection() as db:
                 db_user_id = await get_user_id(db, interaction.user.name)
                 eventinfo, eventscoreslist = await get_event_scoreboard(db, db_user_id, event_type=event_type)
@@ -91,11 +94,18 @@ class Scoreboard(commands.Cog):
                         scoreboard.add_field(name="", value=block, inline=False)
 
                 await interaction.followup.send(embed=scoreboard)
-        except Exception:
+        except Exception as error:
             logger.exception(
                 "[showScoreboard] Exception user=%r event_type=%r",
                 interaction.user,
                 event_type,
+            )
+            await send_error_alert(
+                self.bot,
+                where="fzd_show",
+                error=error,
+                interaction=interaction,
+                details={"event_type": event_type},
             )
             if interaction.response.is_done():
                 await interaction.followup.send(

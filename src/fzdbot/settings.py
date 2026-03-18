@@ -19,8 +19,16 @@ class Settings(BaseSettings):
     db_port: int = 3306
 
     log_level: str = "INFO"
+    error_alert_channel_id: int | None = 1186081056143708250
     scoreboard_display_podium: bool = False
     scoreboard_lines_per_block: int = 8
+
+    @field_validator("error_alert_channel_id", mode="before")
+    @classmethod
+    def empty_error_alert_channel_id_to_none(cls, value: object) -> object:
+        if value == "":
+            return None
+        return value
 
     @field_validator("log_level")
     @classmethod

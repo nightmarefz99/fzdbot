@@ -9,7 +9,7 @@ description = "A Discord bot for tracking and displaying scores, integrated with
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [{ name = "Nightmare", email = "tromnick@yahoo.com" }]
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 dependencies = [
     "discord.py>=2.0",
     "aiomysql>=0.2.0",

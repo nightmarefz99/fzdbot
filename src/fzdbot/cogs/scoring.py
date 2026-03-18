@@ -7,6 +7,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from fzdbot.error_alerts import send_error_alert
 from fzdbot.fzd_db import (
     add_new_user,
     check_for_active_event,
@@ -130,11 +131,17 @@ class Scoring(commands.Cog):
                 "❌ ERROR! Could not add you to the database. Try the '/fzd_register' command, or contact FZD staff for help.",
                 ephemeral=True,
             )
-        except Exception:
+        except Exception as error:
             await interaction.response.send_message(
                 "❌ ERROR! Something went wrong, contact FZD staff for help! ", ephemeral=True
             )
             logger.exception("Exception in add_score for user=%s", interaction.user)
+            await send_error_alert(
+                self.bot,
+                where="fzd_add_score",
+                error=error,
+                interaction=interaction,
+            )
 
     # =============================================================================================================
     #   /add_rank
@@ -226,11 +233,17 @@ class Scoring(commands.Cog):
                 "❌ ERROR! Could not add you to the database. Try the '/fzd_register' command, or contact FZD staff for help.",
                 ephemeral=True,
             )
-        except Exception:
+        except Exception as error:
             await interaction.response.send_message(
                 "❌ ERROR! Something went wrong, contact FZD staff for help! ", ephemeral=True
             )
             logger.exception("Exception in add_rank for user=%s", interaction.user)
+            await send_error_alert(
+                self.bot,
+                where="fzd_add_rank",
+                error=error,
+                interaction=interaction,
+            )
 
     # ------------------------------------------------------------------
     # Autocomplete handler for editScore and deleteScore
@@ -271,6 +284,7 @@ class Scoring(commands.Cog):
     )
     async def editScore(self, interaction: discord.Interaction, old_score: str, new_score: str):
         #  old_score is returned packed as "<score>|<id>" when a proper option is selected
+        opts = []
         try:
             async with get_db_connection() as db:
                 valid_options = await get_user_scores(db, interaction.user.name, check_for_score_method=True)
@@ -304,12 +318,25 @@ class Scoring(commands.Cog):
                     await interaction.response.send_message(
                         f"✅ User {interaction.user.name} has modified submitted score from {score} to {new_score}"
                     )
-        except Exception as e:
+        except (ValueError, TypeError) as e:
             logger.warning("Exception in editScore for user=%s: %s", interaction.user, e)
             await interaction.response.send_message(
                 "❌  ERROR! Both options 'old_score' and 'new_score'  must be entered as integers! \n"
                 + f"    And 'old_score' must be one of the available options for you: {opts} \n"
                 + f"    ---> You chose: '{old_score}'",
+                ephemeral=True,
+            )
+        except Exception as error:
+            logger.exception("Unexpected exception in editScore for user=%s", interaction.user)
+            await send_error_alert(
+                self.bot,
+                where="fzd_edit_score",
+                error=error,
+                interaction=interaction,
+                details={"old_score": old_score, "new_score": new_score},
+            )
+            await interaction.response.send_message(
+                "❌ ERROR! Something went wrong, contact FZD staff for help!",
                 ephemeral=True,
             )
 
@@ -323,6 +350,7 @@ class Scoring(commands.Cog):
     )
     async def deleteScore(self, interaction: discord.Interaction, score_to_delete: str):
         #  score_to_delete is returned packed as "<score>|<id>" when a proper option is selected
+        opts = []
         try:
             async with get_db_connection() as db:
                 valid_options = await get_user_scores(db, interaction.user.name)
@@ -363,13 +391,32 @@ class Scoring(commands.Cog):
                     else:
                         await interaction.followup.send("Cancelled — no changes were made.", ephemeral=True)
 
-        except Exception as e:
+        except (ValueError, TypeError) as e:
             logger.warning("Exception in deleteScore for user=%s: %s", interaction.user, e)
             await interaction.response.send_message(
                 f"❌  ERROR! 'score_to_delete' must be one of the available options for you: {opts} \n"
                 + f"    ---> You chose: '{score_to_delete}'",
                 ephemeral=True,
             )
+        except Exception as error:
+            logger.exception("Unexpected exception in deleteScore for user=%s", interaction.user)
+            await send_error_alert(
+                self.bot,
+                where="fzd_delete_score",
+                error=error,
+                interaction=interaction,
+                details={"score_to_delete": score_to_delete},
+            )
+            if interaction.response.is_done():
+                await interaction.followup.send(
+                    "❌ ERROR! Something went wrong, contact FZD staff for help!",
+                    ephemeral=True,
+                )
+            else:
+                await interaction.response.send_message(
+                    "❌ ERROR! Something went wrong, contact FZD staff for help!",
+                    ephemeral=True,
+                )
 
     # Bind autocomplete handler to edit and delete commands in cog
     async def cog_load(self):

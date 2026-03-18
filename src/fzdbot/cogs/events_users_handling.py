@@ -6,6 +6,7 @@ from discord.ext import commands
 from discord import app_commands
 import aiomysql
 
+from fzdbot.error_alerts import send_error_alert
 from fzdbot.fzd_db import get_db_connection  # connect_to_database
 from fzdbot.fzd_db import get_event_types
 from fzdbot.fzd_db import add_new_user
@@ -72,10 +73,22 @@ class Modify_Events_Users(commands.Cog):
                 await interaction.response.send_message(f"✅ FZD event {event_name[0]} successfully started!")
                 logger.info("User %s started event %s", interaction.user, event_name[0])
 
-        except Exception as e:
+        except (IndexError, ValueError) as e:
             logger.warning("[startEvent] exception: %s", e)
             await interaction.response.send_message(
                 f"❌ ERROR! Must choose from available event options -- {opts}", ephemeral=True
+            )
+        except Exception as error:
+            logger.exception("[startEvent] Unexpected exception")
+            await send_error_alert(
+                self.bot,
+                where="fzd_start_event",
+                error=error,
+                interaction=interaction,
+            )
+            await interaction.response.send_message(
+                "❌ ERROR! Something went wrong, please contact FZD staff to address!",
+                ephemeral=True,
             )
 
     async def cog_load(self):
@@ -126,11 +139,17 @@ class Modify_Events_Users(commands.Cog):
                 ephemeral=True,
             )
             logger.warning("[registerUser] IntegrityError: %s", ie)
-        except Exception:
+        except Exception as error:
             await interaction.response.send_message(
                 f"{warning}❌ ERROR! Something went wrong, please contact FZD staff to address!", ephemeral=True
             )
             logger.exception("[registerUser] Exception occurred in fzd_register")
+            await send_error_alert(
+                self.bot,
+                where="fzd_register",
+                error=error,
+                interaction=interaction,
+            )
 
     # @app_commands.command(name="test_async")
     # async def test_async(self, interaction: discord.Interaction, delay: int):
@@ -152,11 +171,17 @@ class Modify_Events_Users(commands.Cog):
                 )
                 schedule.add_field(name="", value=formatted_lines[0], inline=False)
                 await interaction.response.send_message(embed=schedule)
-        except Exception:
+        except Exception as error:
             await interaction.response.send_message(
-                f"❌ ERROR! Something went wrong, please contact FZD staff to address!", ephemeral=True
+                "❌ ERROR! Something went wrong, please contact FZD staff to address!", ephemeral=True
             )
             logger.exception("[viewSchedule] Exception occurred in fzd_events_schedule")
+            await send_error_alert(
+                self.bot,
+                where="fzd_events_schedule",
+                error=error,
+                interaction=interaction,
+            )
 
 
 async def setup(bot: commands.Bot):
