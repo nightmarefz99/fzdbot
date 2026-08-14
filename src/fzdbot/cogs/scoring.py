@@ -8,14 +8,13 @@ from discord import app_commands
 from discord.ext import commands
 
 from fzdbot.error_alerts import send_error_alert
+from fzdbot.utils.db_utils import get_or_create_db_user
 from fzdbot.fzd_db import (
-    add_new_user,
     check_for_active_event,
     delete_score,
     edit_score,
     get_db_connection,  # connect_to_database
     get_machines,
-    get_user_id,
     get_user_scores,
     submit_score,
 )
@@ -56,13 +55,8 @@ class Scoring(commands.Cog):
 
             # Get user id first, or add user if not registered in database
             async with get_db_connection() as db:
-                db_user_id = await get_user_id(db, interaction.user.name)
+                db_user_id = await get_or_create_db_user(db, interaction.user)
                 machine_list = [s["name"] for s in self.machine_dict if "name" in s]
-                if db_user_id is None:
-                    await add_new_user(db, interaction.user, display_name=interaction.user.nick[0:10])
-                    db_user_id = await get_user_id(db, interaction.user.name)
-                    if db_user_id is None:
-                        raise TypeError(f"Could not add new user {interaction.user}")
 
                 # check an event is active before adding data
                 current_event = await check_for_active_event(db)
@@ -161,13 +155,8 @@ class Scoring(commands.Cog):
 
             # Get user id first, or add user if not registered in database
             async with get_db_connection() as db:
-                db_user_id = await get_user_id(db, interaction.user.name)
+                db_user_id = await get_or_create_db_user(db, interaction.user)
                 machine_list = [s["name"] for s in self.machine_dict if "name" in s]
-                if db_user_id is None:
-                    await add_new_user(db, interaction.user, display_name=interaction.user.nick[0:10])
-                    db_user_id = await get_user_id(db, interaction.user.name)
-                    if db_user_id is None:
-                        raise TypeError(f"Could not add new user {interaction.user}")
 
                 # check an event is active before adding data
                 current_event = await check_for_active_event(db)
