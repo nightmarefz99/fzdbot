@@ -21,6 +21,7 @@ from fzdbot.fzd_db import (
 )
 from fzdbot.settings import get_settings
 from fzdbot.views.confirm_delete import ConfirmDeleteScore
+from fzdbot.utils.warnings import InputWarnings
 
 logger = logging.getLogger(__name__)
 
@@ -63,57 +64,54 @@ class Scoring(commands.Cog):
                     db_user_id = await get_user_id(db, interaction.user.name)
                     if db_user_id is None:
                         raise TypeError(f"Could not add new user {interaction.user}")
-
                 # check an event is active before adding data
                 current_event = await check_for_active_event(db)
-                if current_event["name"] == "NULL":
-                    await interaction.response.send_message(
-                        "⚠️  Warning: No event is currently active, score was not added!  ", ephemeral=True
-                    )
-                elif current_event["scoring_method"] != "points":
-                    await interaction.response.send_message(
-                        f"⚠️  Warning: {current_event['name']} requires rank results, please use /fzd_add_rank ",
-                        ephemeral=True,
-                    )
-                elif machine not in machine_list and machine is not None:
-                    await interaction.response.send_message(
-                        f"⚠️  Warning: {machine} not one of the options {machine_list}. Score not added.",
-                        ephemeral=True,
-                    )
-                elif current_event.get("is_machine_input_required") is True and machine is None:
-                    await interaction.response.send_message(
-                        "⚠️  Warning: machine option required for this event. Score not added.",
-                        ephemeral=True,
-                    )
-                else:
-                    if machine is not None:
-                        machine_choice = next(
-                            (item for item in self.machine_dict if item.get("name") == machine), None
-                        )
-                        machine_choice_id = machine_choice["id"] if machine_choice else None
-                        machine_choice_name = machine_choice["name"] if machine_choice else None
-                    else:
-                        machine_choice_id = None
-                        machine_choice_name = None
 
-                    user_data = [
-                        db_user_id,
-                        current_event["id"],
-                        int(score),
-                        current_event["scoring_method"],
-                        machine_choice_id,
-                    ]
-                    return_score = await submit_score(db, user_data)  # interaction.user
-                    await interaction.response.send_message(
-                        f"✅ User {interaction.user} has entered a score of {return_score} to {current_event['name']} using machine {machine_choice_name}"
-                    )  # , ephemeral=True)
-                    logger.info(
-                        "User %s entered score=%s for event=%s machine=%s",
-                        interaction.user,
-                        score,
-                        current_event["name"],
-                        machine_choice_name,
-                    )
+            # Warnings
+            if current_event["name"] == "NULL":
+                await InputWarnings.no_event(interaction, "points")
+                return
+            if current_event["scoring_method"] != "points":
+                await InputWarnings.wrong_scoring_method(interaction, current_event["name"], "points")
+                return
+            if machine not in machine_list and machine is not None:
+                await InputWarnings.machine_not_found(interaction, machine, machine_list)
+                return
+            if current_event.get("is_machine_input_required") is True and machine is None:
+                await InputWarnings.machine_needed(interaction)
+                return
+
+            if machine is not None:
+                machine_choice = next(
+                    (item for item in self.machine_dict if item.get("name") == machine), None
+                )
+                machine_choice_id = machine_choice["id"] if machine_choice else None
+                machine_choice_name = machine_choice["name"] if machine_choice else None
+            else:
+                machine_choice_id = None
+                machine_choice_name = None
+
+            user_data = [
+                db_user_id,
+                current_event["id"],
+                int(score),
+                current_event["scoring_method"],
+                machine_choice_id,
+            ]
+
+            # Add score to database
+            async with get_db_connection() as db:
+                return_score = await submit_score(db, user_data)  # interaction.user
+            await interaction.response.send_message(
+                f"✅ User {interaction.user} has entered a score of {return_score} to {current_event['name']} using machine {machine_choice_name}"
+            )  # , ephemeral=True)
+            logger.info(
+                "User %s entered score=%s for event=%s machine=%s",
+                interaction.user,
+                score,
+                current_event["name"],
+                machine_choice_name,
+            )
 
         except (
             ValueError
@@ -147,7 +145,7 @@ class Scoring(commands.Cog):
     #   /add_rank
     # =============================================================================================================
 
-    # Add a score to an event
+    # Add a rank to an event
     @app_commands.command(
         name="fzd_add_rank", description="Add rank placement to FZD scoreboard (i.e. for Kingmaker events)"
     )  # , guild=GUILD_ID)
@@ -168,59 +166,56 @@ class Scoring(commands.Cog):
                     db_user_id = await get_user_id(db, interaction.user.name)
                     if db_user_id is None:
                         raise TypeError(f"Could not add new user {interaction.user}")
-
                 # check an event is active before adding data
                 current_event = await check_for_active_event(db)
-                logger.debug("add_rank current_event=%r", current_event)
-                if current_event["name"] == "NULL":
-                    await interaction.response.send_message(
-                        "⚠️  Warning: No event is currently active, rank was not added!  ", ephemeral=True
-                    )
-                elif current_event["scoring_method"] == "points":
-                    await interaction.response.send_message(
-                        f"⚠️  Warning: {current_event['name']} is normal scoring, please submit race/GP points using /fzd_add_score ",
-                        ephemeral=True,
-                    )
-                elif machine not in machine_list and machine is not None:
-                    await interaction.response.send_message(
-                        f"⚠️  Warning: {machine} not one of the options {machine_list}. Score not added.",
-                        ephemeral=True,
-                    )
-                elif current_event.get("is_machine_input_required") is True and machine is None:
-                    await interaction.response.send_message(
-                        "⚠️  Warning: machine option required for this event. Score not added.",
-                        ephemeral=True,
-                    )
-                else:
-                    if machine is not None:
-                        machine_choice = next(
-                            (item for item in self.machine_dict if item.get("name") == machine), None
-                        )
-                        machine_choice_id = machine_choice["id"] if machine_choice else None
-                        machine_choice_name = machine_choice["name"] if machine_choice else None
-                    else:
-                        machine_choice_id = None
-                        machine_choice_name = None
 
-                    user_data = [
-                        db_user_id,
-                        current_event["id"],
-                        int(rank),
-                        current_event["scoring_method"],
-                        machine_choice_id,
-                    ]
-                    return_score = await submit_score(db, user_data)  # interaction.user
-                    await interaction.response.send_message(
-                        f"✅ User {interaction.user} has entered rank {rank} → {return_score} points have been added to {current_event['name']} using machine {machine_choice_name}"
-                    )  # , ephemeral=True)
-                    logger.info(
-                        "User %s entered rank=%s (%s points) for event=%s machine=%s",
-                        interaction.user,
-                        rank,
-                        return_score,
-                        current_event["name"],
-                        machine_choice_name,
-                    )
+            logger.debug("add_rank current_event=%r", current_event)
+            if current_event["name"] == "NULL":
+                await InputWarnings.no_event(interaction, "rank")
+                return
+            if current_event["scoring_method"] == "points":
+                await InputWarnings.wrong_scoring_method(interaction, current_event["name"], "points")
+                return
+            if machine not in machine_list and machine is not None:
+                await InputWarnings.machine_not_found(interaction, machine, machine_list)
+                return
+            if current_event.get("is_machine_input_required") is True and machine is None:
+                await InputWarnings.machine_needed(interaction)
+                return
+
+            if machine is not None:
+                machine_choice = next(
+                    (item for item in self.machine_dict if item.get("name") == machine), None
+                )
+                machine_choice_id = machine_choice["id"] if machine_choice else None
+                machine_choice_name = machine_choice["name"] if machine_choice else None
+            else:
+                machine_choice_id = None
+                machine_choice_name = None
+
+            user_data = [
+                db_user_id,
+                current_event["id"],
+                int(rank),
+                current_event["scoring_method"],
+                machine_choice_id,
+            ]
+
+            # Add rank to database
+            async with get_db_connection() as db:
+                return_score = await submit_score(db, user_data)  # interaction.user
+
+            await interaction.response.send_message(
+                f"✅ User {interaction.user} has entered rank {rank} → {return_score} points have been added to {current_event['name']} using machine {machine_choice_name}"
+            )  # , ephemeral=True)
+            logger.info(
+                "User %s entered rank=%s (%s points) for event=%s machine=%s",
+                interaction.user,
+                rank,
+                return_score,
+                current_event["name"],
+                machine_choice_name,
+            )
 
         except (
             ValueError
@@ -293,31 +288,24 @@ class Scoring(commands.Cog):
                 if score not in opts:
                     raise ValueError("score {score} not one of the options {opts}")
 
-                if score == "NO CURRENT EVENT":
-                    await interaction.response.send_message(
-                        "⚠️   No current event active, can't edit scores! If you need help, contact an FZD mod",
-                        ephemeral=True,
-                    )
-                elif score == "NO USER SCORES FOUND":
-                    await interaction.response.send_message(
-                        f"⚠️   No submitted scores found for user {interaction.user.name}! If you need help, contact an FZD mod",
-                        ephemeral=True,
-                    )
-                elif score == "DISABLED FOR THIS EVENT":
-                    await interaction.response.send_message(
-                        "⚠️   The /fzd_edit_score command does not work with Rank-based Kingmaker-style events! \n"
-                        + "        If you need to edit a score, you may instead: \n"
-                        + "               (1) delete the score first with /fzd_delete_score, then \n"
-                        + "               (2) resubmit your rank with /fzd_add_rank \n"
-                        + "        Or contact an FZD mod for help!",
-                        ephemeral=True,
-                    )
+            # Warnings
+            if score == "NO CURRENT EVENT":
+                await InputWarnings.no_event(interaction, "edit")
+                return
+            elif score == "NO USER SCORES FOUND":
+                await InputWarnings.no_existing_score(interaction, interaction.user.name)
+                return
+            elif score == "DISABLED FOR THIS EVENT":
+                await InputWarnings.edit_disabled(interaction)
+                return
 
-                else:
-                    await edit_score(db, (int(new_score), int(idchoice)))
-                    await interaction.response.send_message(
-                        f"✅ User {interaction.user.name} has modified submitted score from {score} to {new_score}"
-                    )
+            # Edit score in database
+            async with get_db_connection() as db:
+                await edit_score(db, (int(new_score), int(idchoice)))
+            await interaction.response.send_message(
+                f"✅ User {interaction.user.name} has modified submitted score from {score} to {new_score}"
+            )
+
         except (ValueError, TypeError) as e:
             logger.warning("Exception in editScore for user=%s: %s", interaction.user, e)
             await interaction.response.send_message(
@@ -354,42 +342,42 @@ class Scoring(commands.Cog):
         try:
             async with get_db_connection() as db:
                 valid_options = await get_user_scores(db, interaction.user.name)
-                opts = [s["score"] for s in valid_options if "score" in s]
 
-                score, idchoice = score_to_delete.split("|")
-                if score not in opts:
-                    raise ValueError("score {score} not one of the options {opts}")
+            opts = [s["score"] for s in valid_options if "score" in s]
+            score, idchoice = score_to_delete.split("|")
+            
+            if score not in opts:
+                raise ValueError("score {score} not one of the options {opts}")
 
-                if score == "NO CURRENT EVENT":
-                    await interaction.response.send_message(
-                        "⚠️   No current event active, can't edit scores! If you need help, contact an FZD mod",
-                        ephemeral=True,
-                    )
-                elif score == "NO USER SCORES FOUND":
-                    await interaction.response.send_message(
-                        f"⚠️   No submitted scores found for user {interaction.user.name}! If you need help, contact an FZD mod",
-                        ephemeral=True,
-                    )
-                else:
-                    view = ConfirmDeleteScore(interaction)
-                    await interaction.response.send_message(
-                        f"⚠️  Are you sure you want to delete '{score}' from your scores?",
-                        view=view,
-                        ephemeral=True,
-                    )
+            # Warnings
+            if score == "NO CURRENT EVENT":
+                await InputWarnings.no_event(interaction, "delete")
+                return
+            elif score == "NO USER SCORES FOUND":
+                await InputWarnings.no_existing_score(interaction, interaction.user.name)
+                return
 
-                    timed_out = await view.wait()
-                    if timed_out or view.confirmed is None:
-                        await interaction.followup.send("Timed out — no changes were made.", ephemeral=True)
-                        return
-                    if view.confirmed:
-                        await delete_score(db, [idchoice])
-                        await interaction.followup.send(
-                            content=f"✅ User {interaction.user.name} has successfully deleted '{score}' from their submitted scores",
-                            ephemeral=False,
-                        )
-                    else:
-                        await interaction.followup.send("Cancelled — no changes were made.", ephemeral=True)
+            view = ConfirmDeleteScore(interaction)
+            await interaction.response.send_message(
+                f"⚠️  Are you sure you want to delete '{score}' from your scores?",
+                view=view,
+                ephemeral=True,
+            )
+
+            timed_out = await view.wait()
+            if timed_out or view.confirmed is None:
+                await interaction.followup.send("Timed out — no changes were made.", ephemeral=True)
+                return
+
+            if view.confirmed:
+                async with get_db_connection() as db:
+                    await delete_score(db, [idchoice])
+                await interaction.followup.send(
+                    content=f"✅ User {interaction.user.name} has successfully deleted '{score}' from their submitted scores",
+                    ephemeral=False,
+                )
+            else:
+                await interaction.followup.send("Cancelled — no changes were made.", ephemeral=True)
 
         except (ValueError, TypeError) as e:
             logger.warning("Exception in deleteScore for user=%s: %s", interaction.user, e)
