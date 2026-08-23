@@ -116,12 +116,12 @@ class Scoring(commands.Cog):
             )
         except OverflowError:
             await interaction.response.send_message(
-                f"❌ ERROR! 'score' should not be larger tnan {maxscore}. Please be nice to Nightmare's bot.",
+                f"❌ ERROR! 'score' should not be larger than {maxscore}. Please be nice to Nightmare's bot.",
                 ephemeral=True,
             )
         except TypeError:
             await interaction.response.send_message(
-                "❌ ERROR! Could not add you to the database. Try the '/fzd_register' command, or contact FZD staff for help.",
+                "❌ ERROR! Could not add you to the database. Try the '/fzd_set_name' command, or contact FZD staff for help.",
                 ephemeral=True,
             )
         except Exception as error:
@@ -216,7 +216,7 @@ class Scoring(commands.Cog):
             )
         except TypeError:
             await interaction.response.send_message(
-                "❌ ERROR! Could not add you to the database. Try the '/fzd_register' command, or contact FZD staff for help.",
+                "❌ ERROR! Could not add you to the database. Try the '/fzd_set_name' command, or contact FZD staff for help.",
                 ephemeral=True,
             )
         except Exception as error:

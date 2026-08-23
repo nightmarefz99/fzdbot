@@ -9,7 +9,21 @@ class NextStep(StrEnum):
     EDIT = "edit"
     CONFIRM = "confirm"
     WITHDRAW_CONF = "withdraw_conf"
+    OPTIONMENU = "option_menu"
+    GENERAL = "general"
+    TIME = "time"
+    DIVTEAM = "divteam"
+    PRIX = "prix"
+    MACHINE = "machine"
+    REGPERIOD = "reg_period"
+    DISCORD = "discord"
+    CONFIRMDELETE = "confirm_delete"
     NULL = "null"
+
+
+class Mode(StrEnum):
+    NEW = "new"
+    EDIT = "edit"
 
 
 class DivTeam(StrEnum):
@@ -63,8 +77,10 @@ def set_step_info() -> list[dict]:
         {"title": "Step 1: Basic Information"},
         {"title": "Step 2: Event Time"},
         {"title": "Step 3: Divisions and Teams"},
-        {"title": "Step 4: Registration Period"},
-        {"title": "Step 5: Discord Channels"}
+        {"title": "Step 4: Lineup"},
+        {"title": "Step 5: Vehicles"},
+        {"title": "Step 6: Registration Period"},
+        {"title": "Step 7: Discord Channels"}
     ]
     return step_info
 
