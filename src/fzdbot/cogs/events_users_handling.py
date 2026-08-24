@@ -98,7 +98,7 @@ class Modify_Events_Users(commands.Cog):
             self.recurring_events = await get_event_types(db)
 
     # This command registers a user into the database
-    @app_commands.command(name="fzd_register", description="Register your discord id to FZD scoreboard database")
+    @app_commands.command(name="fzd_set_name", description="Register your discord id to FZD scoreboard database")
     async def registerUser(self, interaction: discord.Interaction, display_name: str):
         warning = ""
         if display_name is None:
