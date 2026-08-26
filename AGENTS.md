@@ -40,13 +40,14 @@ scripts/
 src/
   fzdbot/
     cogs/
-      events_users_handling.py (165)
-      scoring.py (386)
-      show_scoreboard.py (119)
+      events_users_handling.py (190)
+      scoring.py (433)
+      show_scoreboard.py (127)
+    error_alerts.py (88)
     formatters.py (169)
     fzd_db.py (309)
-    main.py (49)
-    settings.py (57)
+    main.py (113)
+    settings.py (65)
     views/
       confirm_delete.py (26)
 ```
@@ -56,16 +57,21 @@ src/
 
 ```text
 src/fzdbot/cogs/events_users_handling.py
-    23: class Modify_Events_Users(…)
-   162: async def setup(…)
+    24: class Modify_Events_Users(…)
+   187: async def setup(…)
 
 src/fzdbot/cogs/scoring.py
-    27: class Scoring(…)
-   382: async def setup(…)
+    28: class Scoring(…)
+   429: async def setup(…)
 
 src/fzdbot/cogs/show_scoreboard.py
-    28: class Scoreboard(…)
-   116: async def setup(…)
+    29: class Scoreboard(…)
+   124: async def setup(…)
+
+src/fzdbot/error_alerts.py
+    12: def _truncate(…)
+    19: def _build_error_alert_message(…)
+    57: async def send_error_alert(…)
 
 src/fzdbot/formatters.py
      9: def format_discord_timestamp(…)
@@ -95,13 +101,13 @@ src/fzdbot/fzd_db.py
    306: async def get_machines(…)
 
 src/fzdbot/main.py
-    12: class FZDBot(…)
-    36: def main(…)
+    15: class FZDBot(…)
+   100: def main(…)
 
 src/fzdbot/settings.py
      9: class Settings(…)
-    47: def get_settings(…)
-    51: def configure_logging(…)
+    55: def get_settings(…)
+    59: def configure_logging(…)
 
 src/fzdbot/views/confirm_delete.py
      4: class ConfirmDeleteScore(…)

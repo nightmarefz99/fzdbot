@@ -28,7 +28,7 @@ async def get_or_create_db_user(db, discord_user):
     """
     db_user_id = await get_user_id(db, discord_user.name)
     if db_user_id is None:
-        await add_new_user(db, discord_user, display_name=discord_user.nick[0:10])
+        await add_new_user(db, discord_user)
         db_user_id = await get_user_id(db, discord_user.name)
         if db_user_id is None:
             raise TypeError(f"Could not add new user {discord_user}")

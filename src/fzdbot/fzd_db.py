@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 import aiomysql
 
 from fzdbot.settings import get_settings
+from fzdbot.utils.user_utils import default_display_name
 
 logger = logging.getLogger(__name__)
 
@@ -138,8 +139,8 @@ async def add_new_user(db, discord_username, display_name=None) -> None:
     # Assuming "discord_display_name" isn't required
     sql_newuser = "INSERT INTO users (tag, discord_user_id) VALUES (%s, %s);"
 
-    if display_name is None:  # Defaults to user's server display name
-        display_name = discord_username.nick[0:10]
+    if display_name is None:  # Defaults to user's discord display name
+        display_name = default_display_name(discord_username)
     await execute_query(db, sql_newuser, params=(display_name, discord_username.name), fetch=None)
 
 

@@ -16,6 +16,7 @@ from fzdbot.fzd_db import check_for_active_event
 from fzdbot.fzd_db import create_event
 from fzdbot.fzd_db import get_event_schedule
 from fzdbot.formatters import format_events_schedule
+from fzdbot.utils.user_utils import default_display_name
 from fzdbot.settings import get_settings
 
 logger = logging.getLogger(__name__)
@@ -102,7 +103,7 @@ class Modify_Events_Users(commands.Cog):
     async def registerUser(self, interaction: discord.Interaction, display_name: str):
         warning = ""
         if display_name is None:
-            display_name = interaction.user.nick[0:10]
+            display_name = default_display_name(interaction.user)
         elif len(display_name) > 10:
             display_name = display_name[0:10]
             warning = "⚠️  Warning: display_name should be 10 characters or less (as in F-Zero 99 in game name) \n"
