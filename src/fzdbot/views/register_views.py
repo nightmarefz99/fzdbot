@@ -395,14 +395,6 @@ class ConfirmView(SessionView):
         container.add_item(ui.Separator(spacing=discord.SeparatorSpacing.small))
         container.add_item(ui.TextDisplay(content=f"{choice_text}\n\n\n\n{confirm_text}"))
 
-        self.affirm_button = GenericButton(
-            parent_view=self,
-            selection_id=None,
-            button_label="Let's Go!",
-            button_color=discord.ButtonStyle.success,
-            button_disabled=False,
-            next_step=NextStep.COMMIT_ADD,
-        )
         self.cancel_button = GenericButton(
             parent_view=self,
             selection_id=None,
@@ -411,8 +403,16 @@ class ConfirmView(SessionView):
             button_disabled=False,
             next_step=NextStep.MENU,
         )
+        self.affirm_button = GenericButton(
+            parent_view=self,
+            selection_id=None,
+            button_label="Let's Go!",
+            button_color=discord.ButtonStyle.success,
+            button_disabled=False,
+            next_step=NextStep.COMMIT_ADD,
+        )
 
-        container.add_item(ui.ActionRow(self.affirm_button, self.cancel_button))
+        container.add_item(ui.ActionRow(self.cancel_button, self.affirm_button))
         self.add_item(container)
 
 
