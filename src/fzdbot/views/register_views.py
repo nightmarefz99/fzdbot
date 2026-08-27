@@ -53,7 +53,7 @@ Please confirm that you will read and follow the rules for each event you regist
             parent_view=self,
             selection_id=None,
             button_label="I Agree",
-            button_color=discord.ButtonStyle.green,
+            button_color=discord.ButtonStyle.success,
             button_disabled=False,
             next_step=NextStep.MENU,
         )
@@ -61,7 +61,7 @@ Please confirm that you will read and follow the rules for each event you regist
             parent_view=self,
             selection_id=None,
             button_label="Not Right Now",
-            button_color=discord.ButtonStyle.red,
+            button_color=discord.ButtonStyle.secondary,
             button_disabled=False,
             next_step=NextStep.LEAVE,
         )
@@ -112,7 +112,7 @@ class RegisterMenuView(SessionView):
                     parent_view=self,
                     selection_id=None,
                     button_label="Done",
-                    button_color=discord.ButtonStyle.gray,
+                    button_color=discord.ButtonStyle.secondary,
                     button_disabled=False,
                     next_step=NextStep.LEAVE,
                 )
@@ -160,7 +160,7 @@ class DivTeamAddView(SessionView):
             parent_view=self,
             selection_id=self.choice,
             button_label="Continue",
-            button_color=discord.ButtonStyle.green,
+            button_color=discord.ButtonStyle.primary,
             button_disabled=True,
             next_step=NextStep.CONFIRM,
         )
@@ -168,7 +168,7 @@ class DivTeamAddView(SessionView):
             parent_view=self,
             selection_id=0,
             button_label="Back",
-            button_color=discord.ButtonStyle.blurple,
+            button_color=discord.ButtonStyle.secondary,
             button_disabled=False,
             next_step=NextStep.MENU,
         )
@@ -269,7 +269,7 @@ class DivTeamEditView(SessionView):
             parent_view=self,
             selection_id=self.choice,
             button_label="Change",
-            button_color=discord.ButtonStyle.blurple,
+            button_color=discord.ButtonStyle.primary,
             button_disabled=True,
             next_step=NextStep.CONFIRM,
         )
@@ -277,7 +277,7 @@ class DivTeamEditView(SessionView):
             parent_view=self,
             selection_id=self.choice,
             button_label="Withdraw from Event",
-            button_color=discord.ButtonStyle.red,
+            button_color=discord.ButtonStyle.danger,
             button_disabled=False,
             next_step=NextStep.WITHDRAW_CONF,
         )
@@ -285,7 +285,7 @@ class DivTeamEditView(SessionView):
             parent_view=self,
             selection_id=0,
             button_label="Back",
-            button_color=discord.ButtonStyle.gray,
+            button_color=discord.ButtonStyle.secondary,
             button_disabled=False,
             next_step=NextStep.MENU,
         )
@@ -399,15 +399,15 @@ class ConfirmView(SessionView):
             parent_view=self,
             selection_id=None,
             button_label="Let's Go!",
-            button_color=discord.ButtonStyle.green,
+            button_color=discord.ButtonStyle.success,
             button_disabled=False,
             next_step=NextStep.COMMIT_ADD,
         )
         self.cancel_button = GenericButton(
             parent_view=self,
             selection_id=None,
-            button_label="Nevermind",
-            button_color=discord.ButtonStyle.red,
+            button_label="Never Mind",
+            button_color=discord.ButtonStyle.secondary,
             button_disabled=False,
             next_step=NextStep.MENU,
         )
@@ -449,7 +449,7 @@ class ConfirmWithdrawlView(SessionView):
             parent_view=self,
             selection_id=None,
             button_label="Withdraw",
-            button_color=discord.ButtonStyle.red,
+            button_color=discord.ButtonStyle.danger,
             button_disabled=False,
             next_step=NextStep.COMMIT_WITHDRAW,
         )
@@ -457,7 +457,7 @@ class ConfirmWithdrawlView(SessionView):
             parent_view=self,
             selection_id=None,
             button_label="Nevermind",
-            button_color=discord.ButtonStyle.gray,
+            button_color=discord.ButtonStyle.secondary,
             button_disabled=False,
             next_step=NextStep.MENU,
         )
