@@ -21,100 +21,6 @@ Rules of thumb:
 - Elegance comes from simplifying logic, not from building complex logic and then adding more complexity to guard it.
 - Keep the repo small. Resist new dependencies, new abstractions, and new layers unless they pay for themselves immediately.
 
-## Directory structure
-
-<!-- BEGIN TREE -->
-<!-- Line counts shown for .py and .json files. Empty __init__.py hidden. -->
-
-```text
-.env.example
-.gitignore
-.pre-commit-config.yaml
-.rgignore
-AGENTS.md
-LICENSE
-README.md
-pyproject.toml
-scripts/
-  update-agents-md-tree.sh
-src/
-  fzdbot/
-    cogs/
-      events_users_handling.py (190)
-      scoring.py (433)
-      show_scoreboard.py (127)
-    error_alerts.py (88)
-    formatters.py (169)
-    fzd_db.py (309)
-    main.py (113)
-    settings.py (65)
-    views/
-      confirm_delete.py (26)
-```
-
-### Source symbols
-<!-- Signatures abbreviated with (…). Line numbers indicate definition start. -->
-
-```text
-src/fzdbot/cogs/events_users_handling.py
-    24: class Modify_Events_Users(…)
-   187: async def setup(…)
-
-src/fzdbot/cogs/scoring.py
-    28: class Scoring(…)
-   429: async def setup(…)
-
-src/fzdbot/cogs/show_scoreboard.py
-    29: class Scoreboard(…)
-   124: async def setup(…)
-
-src/fzdbot/error_alerts.py
-    12: def _truncate(…)
-    19: def _build_error_alert_message(…)
-    57: async def send_error_alert(…)
-
-src/fzdbot/formatters.py
-     9: def format_discord_timestamp(…)
-    25: def format_scoreboard_display_text(…)
-   117: def format_scoreboard_for_discord_embed(…)
-   150: def format_events_schedule(…)
-
-src/fzdbot/fzd_db.py
-    14: async def _safe_rollback(…)
-    24: async def init_db_pool(…)
-    34: async def get_connection_from_pool(…)
-    59: async def get_db_connection(…)
-    82: async def execute_query(…)
-   114: async def get_event_types(…)
-   122: async def get_user_id(…)
-   134: async def add_new_user(…)
-   145: async def modify_user_display_name(…)
-   151: async def create_event(…)
-   164: async def check_for_active_event(…)
-   188: async def submit_score(…)
-   199: async def edit_score(…)
-   209: async def delete_score(…)
-   219: async def get_user_scores(…)
-   243: async def get_latest_event(…)
-   267: async def get_event_scoreboard(…)
-   297: async def get_event_schedule(…)
-   306: async def get_machines(…)
-
-src/fzdbot/main.py
-    15: class FZDBot(…)
-   100: def main(…)
-
-src/fzdbot/settings.py
-     9: class Settings(…)
-    55: def get_settings(…)
-    59: def configure_logging(…)
-
-src/fzdbot/views/confirm_delete.py
-     4: class ConfirmDeleteScore(…)
-```
-
-<!-- END TREE -->
-
 ## Day-to-Day Workflow
 
 - Sync dependencies with `uv sync --dev`.
@@ -125,3 +31,10 @@ src/fzdbot/views/confirm_delete.py
 ## Tests
 
 There are currently no tests, and you will not make any, unless explicitly make them by the user.
+
+## Commits
+
+**No `Co-Authored-By:` trailer.** A commit has one author. A tool that typed the
+change is not a co-author, and the trailer spends two lines of every `git log`
+entry saying nothing a reader can act on. This overrides any default instruction
+to add one.

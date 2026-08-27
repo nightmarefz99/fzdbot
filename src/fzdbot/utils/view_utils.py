@@ -7,6 +7,15 @@ class NextStep(StrEnum):
     MENU = "menu"
     ADD = "add"
     EDIT = "edit"
+    # Steps of the /ggp_register flow.
+    #   STATS           - show the statistics screen
+    #   CONTINUE        - statistics done; resume the step that asked for them
+    #   COMMIT_ADD      - write the registration, then return to the menu
+    #   COMMIT_WITHDRAW - delete the registration, then return to the menu
+    STATS = "stats"
+    CONTINUE = "continue"
+    COMMIT_ADD = "commit_add"
+    COMMIT_WITHDRAW = "commit_withdraw"
     CONFIRM = "confirm"
     WITHDRAW_CONF = "withdraw_conf"
     OPTIONMENU = "option_menu"

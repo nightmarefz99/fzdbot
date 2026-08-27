@@ -1,29 +1,28 @@
-import traceback
 import discord
 from discord import ui
 from fzdbot.utils.event_class import Event, Division, Team, UserRegistrations
 from fzdbot.utils.view_utils import NextStep, DivTeam, discord_timestamp
 from fzdbot.utils.status_policies import user_event_status
-from fzdbot.views.common import GenericButton
+from fzdbot.views.common import GenericButton, SessionView
 
 
 #################################
 # LayoutView classes
 #################################
 
-class CancelView(ui.LayoutView):
+
+class CancelView(SessionView):
     def __init__(self, message: str):
-        super().__init__(timeout=300)
+        super().__init__(timeout=None)  # terminal screen: nothing to time out
         container = ui.Container()
 
         container.add_item(ui.TextDisplay(content=message))
         self.add_item(container)
 
 
-class LoadView(ui.LayoutView):
+class LoadView(SessionView):
     def __init__(self):
-        super().__init__(timeout=300)
-        self.next_step: NextStep = NextStep.NULL
+        super().__init__()
 
         loading_screen_text = """Welcome to your portal to sign up for FZD events! If we have a pending event ready for your signup, you'll find it here.
 
@@ -57,12 +56,9 @@ Please confirm that you will read and follow the rules for each event you regist
         self.add_item(container)
 
 
-class RegisterMenuView(ui.LayoutView):
+class RegisterMenuView(SessionView):
     def __init__(self, events: list[Event], user: UserRegistrations):
-        super().__init__(timeout=300)
-        self.choice: int | None = None
-        self.next_step: NextStep = NextStep.NULL
-        self.message: str = ""
+        super().__init__()
 
         container = ui.Container()
         container.add_item(ui.TextDisplay(content="# Register for an Event"))
@@ -103,11 +99,19 @@ class RegisterMenuView(ui.LayoutView):
         self.add_item(container)
 
 
-class DivTeamAddView(ui.LayoutView):
+    ###########################
+    # Class methods
+    ###########################
+
+    def apply_choice(self, session) -> None:
+        """ self.choice is a scheduled_event_id, or None for the Leave button.
+        """
+        session.select_event(self.choice)
+
+
+class DivTeamAddView(SessionView):
     def __init__(self, event: Event):
-        super().__init__(timeout=300)
-        self.next_step: NextStep = NextStep.NULL
-        self.choice: int | None = None
+        super().__init__()
         self.event: Event = event
         self.div_team_string: DivTeam | None = None
 
@@ -156,7 +160,7 @@ class DivTeamAddView(ui.LayoutView):
     # Drowdown subclass
     #################################
     class div_team_selection(ui.Select):
-        def __init__(self, parent_view: ui.LayoutView, div_team_list: list[Division] | list[Team]):
+        def __init__(self, parent_view: SessionView, div_team_list: list[Division] | list[Team]):
             self.parent_view = parent_view
 
             options = []
@@ -212,14 +216,19 @@ class DivTeamAddView(ui.LayoutView):
             self.continue_button.selection_id = self.choice
 
 
-class DivTeamEditView(ui.LayoutView):
+    def apply_choice(self, session) -> None:
+        """ self.choice is the division/team the dropdown is sitting on.
+        """
+        session.new_div_team_id = self.choice
+
+
+class DivTeamEditView(SessionView):
     def __init__(self, event: Event, existing_div_team_id: int):
-        super().__init__(timeout=300)
+        super().__init__()
         self.choice: int | None = existing_div_team_id
         self.event: Event = event
         self.existing_div_team_id: int = existing_div_team_id
         self.div_team_string: DivTeam | None = None
-        self.next_step: NextStep = NextStep.NULL
         
         if self.event.divisions:
             self.div_team_string = DivTeam.DIVISION
@@ -278,7 +287,7 @@ class DivTeamEditView(ui.LayoutView):
     # Drowdown subclass
     #################################
     class div_team_selection(ui.Select):
-        def __init__(self, parent_view: ui.LayoutView, div_team_list: list[Division] | list[Team]):
+        def __init__(self, parent_view: SessionView, div_team_list: list[Division] | list[Team]):
             self.parent_view = parent_view
 
             options = []
@@ -338,14 +347,23 @@ class DivTeamEditView(ui.LayoutView):
             self.edit_button.selection_id = self.choice
 
         if self.choice == self.existing_div_team_id:
+            # Nothing to change: this is what the user is already registered for.
+            # The old flow forced this button back on, because the statistics
+            # screen was shown after this one and had no way to tell it that the
+            # selection still stood. The session now collects statistics before
+            # this screen is built, so a fresh view starts from the real state.
             self.edit_button.disabled = True
 
 
-class ConfirmView(ui.LayoutView):
+    def apply_choice(self, session) -> None:
+        """ self.choice is the division/team the dropdown is sitting on.
+        """
+        session.new_div_team_id = self.choice
+
+
+class ConfirmView(SessionView):
     def __init__(self, event: Event, div_team_id: int):
-        super().__init__(timeout=300)
-        self.selection_id: int = 0
-        self.next_step: NextStep = NextStep.NULL
+        super().__init__()
 
         div_team_str = event.div_or_team()
 
@@ -373,14 +391,14 @@ class ConfirmView(ui.LayoutView):
         container.add_item(ui.TextDisplay(content=f"{choice_text}\n\n\n\n{confirm_text}"))
 
         self.affirm_button = GenericButton(parent_view=self, 
-                                selection_id=1, 
+                                selection_id=None, 
                                 button_label="Let's Go!", 
                                 button_color=discord.ButtonStyle.green, 
                                 button_disabled=False, 
-                                next_step=NextStep.MENU
+                                next_step=NextStep.COMMIT_ADD
                                     )
         self.cancel_button = GenericButton(parent_view=self, 
-                                selection_id=0, 
+                                selection_id=None, 
                                 button_label="Nevermind", 
                                 button_color=discord.ButtonStyle.red, 
                                 button_disabled=False, 
@@ -391,11 +409,9 @@ class ConfirmView(ui.LayoutView):
         self.add_item(container)
 
 
-class ConfirmWithdrawlView(ui.LayoutView):
+class ConfirmWithdrawlView(SessionView):
     def __init__(self, event: Event, div_team_id: int):
-        super().__init__(timeout=300)
-        self.selection_id: int = 0
-        self.next_step: NextStep = NextStep.NULL
+        super().__init__()
 
         div_team_str = event.div_or_team()
 
@@ -423,14 +439,14 @@ class ConfirmWithdrawlView(ui.LayoutView):
         container.add_item(ui.TextDisplay(content=f"{choice_text}\n\n\n\n{confirm_text}"))
 
         self.affirm_button = GenericButton(parent_view=self, 
-                                        selection_id=1, 
+                                        selection_id=None, 
                                         button_label="Withdraw", 
                                         button_color=discord.ButtonStyle.red, 
                                         button_disabled=False, 
-                                        next_step=NextStep.MENU
+                                        next_step=NextStep.COMMIT_WITHDRAW
                                             )
         self.cancel_button = GenericButton(parent_view=self, 
-                                        selection_id=0, 
+                                        selection_id=None, 
                                         button_label="Nevermind", 
                                         button_color=discord.ButtonStyle.gray, 
                                         button_disabled=False, 
@@ -442,8 +458,9 @@ class ConfirmWithdrawlView(ui.LayoutView):
             )
         self.add_item(container)
 
-class ExitView(ui.LayoutView):
+
+class ExitView(SessionView):
     def __init__(self):
-        super().__init__(timeout=300)
+        super().__init__(timeout=None)  # terminal screen: nothing to time out
 
         self.add_item(ui.Container(ui.TextDisplay("Thank you!")))
