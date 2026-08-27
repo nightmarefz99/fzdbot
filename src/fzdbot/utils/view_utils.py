@@ -57,6 +57,8 @@ def discord_timestamp(dt: datetime, format_type: str = "short") -> str | None:
             format_type = "t"
         case "relative":
             format_type = "R"
+        case "full":
+            format_type = "F"
         case "long":
             format_type = "f"
     if dt:

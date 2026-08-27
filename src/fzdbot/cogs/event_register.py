@@ -211,7 +211,22 @@ class RegSession:
                 return await self._enter(interaction, NextStep.MENU)
 
             case NextStep.LEAVE:
-                return ExitView()
+                if self._prefetch is not None and not self._prefetch.done():
+                    # Left at the rules screen, before the database answered.
+                    # Nobody will ever await this task, so stop it here rather
+                    # than let it finish into a session that is over.
+                    self._prefetch.cancel()
+                    self._prefetch = None
+                    return ExitView()
+                try:
+                    await self.ready()
+                except Exception:
+                    # The exit screen is the wrong place to surface a load
+                    # failure: say goodbye plainly instead of claiming anything
+                    # about what the user is registered for.
+                    logger.exception("ggp_register: prefetch failed; showing the plain exit screen")
+                    return ExitView()
+                return ExitView(self.events, self.user)
 
             case _:
                 raise RuntimeError(f"ggp_register: no screen for step {step!r}")

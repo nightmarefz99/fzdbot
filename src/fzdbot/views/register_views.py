@@ -1,9 +1,21 @@
 import discord
 from discord import ui
-from fzdbot.utils.event_class import Event, Division, Team, UserRegistrations
-from fzdbot.utils.view_utils import NextStep, DivTeam, discord_timestamp
-from fzdbot.utils.status_policies import user_event_status
+
+from fzdbot.settings import get_settings
+from fzdbot.utils.event_class import Division, Event, Team, UserRegistrations
+from fzdbot.utils.status_policies import registered_summary, user_event_status
+from fzdbot.utils.view_utils import DivTeam, NextStep, discord_timestamp
 from fzdbot.views.common import GenericButton, SessionView
+
+
+def channel_mention(channel_id: int | None, fallback: str) -> str:
+    """ A clickable channel, or a readable name when the id is not configured.
+
+        `<#id>` is preferred over a link button or a hard-coded #name: Discord
+        renders it with the channel's current name, so a rename does not leave
+        stale copy behind.
+    """
+    return f"<#{channel_id}>" if channel_id else fallback
 
 
 #################################
@@ -37,21 +49,23 @@ Please confirm that you will read and follow the rules for each event you regist
         container.add_item(ui.Separator(spacing=discord.SeparatorSpacing.small))
         container.add_item(ui.TextDisplay(content=loading_screen_text))
 
-        self.affirm_button = GenericButton(parent_view=self, 
-                                        selection_id=None, 
-                                        button_label="Continue", 
-                                        button_color=discord.ButtonStyle.green, 
-                                        button_disabled=False, 
-                                        next_step=NextStep.MENU
-                                            )
-        self.cancel_button = GenericButton(parent_view=self, 
-                                        selection_id=None, 
-                                        button_label="Leave", 
-                                        button_color=discord.ButtonStyle.red, 
-                                        button_disabled=False, 
-                                        next_step=NextStep.LEAVE
-                                            )
-        
+        self.affirm_button = GenericButton(
+            parent_view=self,
+            selection_id=None,
+            button_label="I Agree",
+            button_color=discord.ButtonStyle.green,
+            button_disabled=False,
+            next_step=NextStep.MENU,
+        )
+        self.cancel_button = GenericButton(
+            parent_view=self,
+            selection_id=None,
+            button_label="Not Right Now",
+            button_color=discord.ButtonStyle.red,
+            button_disabled=False,
+            next_step=NextStep.LEAVE,
+        )
+
         container.add_item(ui.ActionRow(self.affirm_button, self.cancel_button))
         self.add_item(container)
 
@@ -72,40 +86,47 @@ class RegisterMenuView(SessionView):
         # Select button for each status.next_step
         for i, event in enumerate(events):
             status = user_event_status(event, user)
-            section_text.append(ui.TextDisplay(
-                content=f"### {event.event_name}\n\t{discord_timestamp(event.start_time, "long")}\n\t{status["label"]}"))
-            section_button.append(GenericButton(parent_view=self, 
-                                        selection_id=event.scheduled_event_id, 
-                                        button_label=status["button_label"], 
-                                        button_color=status["button_color"], 
-                                        button_disabled=status["button_disabled"], 
-                                        next_step=status["next_step"]
-                                          ))
+            section_text.append(
+                ui.TextDisplay(
+                    content=f"### {event.event_name}\n\t{discord_timestamp(event.start_time, 'long')}\n\t{status['label']}"
+                )
+            )
+            section_button.append(
+                GenericButton(
+                    parent_view=self,
+                    selection_id=event.scheduled_event_id,
+                    button_label=status["button_label"],
+                    button_color=status["button_color"],
+                    button_disabled=status["button_disabled"],
+                    next_step=status["next_step"],
+                )
+            )
             section.append(ui.Section(section_text[i], accessory=section_button[i]))
             container.add_item(section[i])
 
         # Build the Cancel button section
         container.add_item(ui.Separator(spacing=discord.SeparatorSpacing.small))
-        container.add_item(ui.ActionRow(
-            GenericButton(parent_view=self, 
-                            selection_id=None, 
-                            button_label="Leave", 
-                            button_color=discord.ButtonStyle.red, 
-                            button_disabled=False, 
-                            next_step=NextStep.LEAVE
-                            )
-        ))
+        container.add_item(
+            ui.ActionRow(
+                GenericButton(
+                    parent_view=self,
+                    selection_id=None,
+                    button_label="Done",
+                    button_color=discord.ButtonStyle.gray,
+                    button_disabled=False,
+                    next_step=NextStep.LEAVE,
+                )
+            )
+        )
 
         self.add_item(container)
-
 
     ###########################
     # Class methods
     ###########################
 
     def apply_choice(self, session) -> None:
-        """ self.choice is a scheduled_event_id, or None for the Leave button.
-        """
+        """self.choice is a scheduled_event_id, or None for the Leave button."""
         session.select_event(self.choice)
 
 
@@ -125,8 +146,7 @@ class DivTeamAddView(SessionView):
             raise ValueError("To create a DivTeamView there need to be divisions (plural) or teams.")
 
         container = ui.Container()
-        container.add_item(ui.TextDisplay(
-            f"# Chooose a {self.div_team_string.capitalize()}"))
+        container.add_item(ui.TextDisplay(f"# Chooose a {self.div_team_string.capitalize()}"))
         container.add_item(ui.Separator(spacing=discord.SeparatorSpacing.small))
 
         # Build dropdown
@@ -136,20 +156,22 @@ class DivTeamAddView(SessionView):
 
         # Build the Continue button section
         container.add_item(ui.Separator(spacing=discord.SeparatorSpacing.small))
-        self.continue_button = GenericButton(parent_view=self, 
-                                        selection_id=self.choice, 
-                                        button_label="Continue", 
-                                        button_color=discord.ButtonStyle.green, 
-                                        button_disabled=True, 
-                                        next_step=NextStep.CONFIRM
-                                          )
-        self.back_button = GenericButton(parent_view=self, 
-                                        selection_id=0, 
-                                        button_label="Back", 
-                                        button_color=discord.ButtonStyle.blurple, 
-                                        button_disabled=False, 
-                                        next_step=NextStep.MENU
-                                            )
+        self.continue_button = GenericButton(
+            parent_view=self,
+            selection_id=self.choice,
+            button_label="Continue",
+            button_color=discord.ButtonStyle.green,
+            button_disabled=True,
+            next_step=NextStep.CONFIRM,
+        )
+        self.back_button = GenericButton(
+            parent_view=self,
+            selection_id=0,
+            button_label="Back",
+            button_color=discord.ButtonStyle.blurple,
+            button_disabled=False,
+            next_step=NextStep.MENU,
+        )
         container.add_item(ui.ActionRow(self.back_button, self.continue_button))
 
         self.add_item(container)
@@ -165,10 +187,7 @@ class DivTeamAddView(SessionView):
 
             options = []
             for div_team in div_team_list:
-                options.append(discord.SelectOption(label=div_team.name, 
-                                        description=None, 
-                                        value=div_team.id
-                ))
+                options.append(discord.SelectOption(label=div_team.name, description=None, value=div_team.id))
             super().__init__(options=options)
 
         async def callback(self, interaction: discord.Interaction):
@@ -177,19 +196,17 @@ class DivTeamAddView(SessionView):
 
             # Set default dropdown option to user's selection
             for option in self.options:
-                option.default = (int(option.value) == int(self.values[0]))
+                option.default = int(option.value) == int(self.values[0])
 
             self.parent_view.set_status()
             await interaction.response.edit_message(view=self.parent_view)
-
 
     ###########################
     # Class methods
     ###########################
 
     def set_status(self) -> None:
-        """ Enable/disable Continue button and set status textbox.
-        """
+        """Enable/disable Continue button and set status textbox."""
         # Find div_team with dropdown choice id
         if not self.choice:
             self.continue_button.disabled = True
@@ -215,10 +232,8 @@ class DivTeamAddView(SessionView):
             self.status_text.content = f"{div_team.capacity - div_team.num_registered} spots available!"
             self.continue_button.selection_id = self.choice
 
-
     def apply_choice(self, session) -> None:
-        """ self.choice is the division/team the dropdown is sitting on.
-        """
+        """self.choice is the division/team the dropdown is sitting on."""
         session.new_div_team_id = self.choice
 
 
@@ -229,7 +244,7 @@ class DivTeamEditView(SessionView):
         self.event: Event = event
         self.existing_div_team_id: int = existing_div_team_id
         self.div_team_string: DivTeam | None = None
-        
+
         if self.event.divisions:
             self.div_team_string = DivTeam.DIVISION
             div_team_list = self.event.divisions
@@ -240,8 +255,7 @@ class DivTeamEditView(SessionView):
             raise ValueError("To create a DivTeamView there need to be divisions (plural) or teams.")
 
         container = ui.Container()
-        container.add_item(ui.TextDisplay(
-            f"# Edit Your Registration"))
+        container.add_item(ui.TextDisplay("# Edit Your Registration"))
         container.add_item(ui.Separator(spacing=discord.SeparatorSpacing.small))
 
         # Build dropdown part of container
@@ -251,37 +265,35 @@ class DivTeamEditView(SessionView):
 
         # Build the button ActionRow
         container.add_item(ui.Separator(spacing=discord.SeparatorSpacing.small))
-        self.edit_button = GenericButton(parent_view=self, 
-                                            selection_id=self.choice, 
-                                            button_label="Change", 
-                                            button_color=discord.ButtonStyle.blurple, 
-                                            button_disabled=True, 
-                                            next_step=NextStep.CONFIRM
-                                                )
-        self.withdraw_button = GenericButton(parent_view=self, 
-                                            selection_id=self.choice, 
-                                            button_label="Withdraw from Event", 
-                                            button_color=discord.ButtonStyle.red, 
-                                            button_disabled=False, 
-                                            next_step=NextStep.WITHDRAW_CONF
-                                                )
-        self.back_button = GenericButton(parent_view=self, 
-                                            selection_id=0, 
-                                            button_label="Back", 
-                                            button_color=discord.ButtonStyle.gray, 
-                                            button_disabled=False, 
-                                            next_step=NextStep.MENU
-                                                )
-        container.add_item(ui.ActionRow(
-            self.back_button,
-            self.edit_button, 
-            self.withdraw_button)
-            )
+        self.edit_button = GenericButton(
+            parent_view=self,
+            selection_id=self.choice,
+            button_label="Change",
+            button_color=discord.ButtonStyle.blurple,
+            button_disabled=True,
+            next_step=NextStep.CONFIRM,
+        )
+        self.withdraw_button = GenericButton(
+            parent_view=self,
+            selection_id=self.choice,
+            button_label="Withdraw from Event",
+            button_color=discord.ButtonStyle.red,
+            button_disabled=False,
+            next_step=NextStep.WITHDRAW_CONF,
+        )
+        self.back_button = GenericButton(
+            parent_view=self,
+            selection_id=0,
+            button_label="Back",
+            button_color=discord.ButtonStyle.gray,
+            button_disabled=False,
+            next_step=NextStep.MENU,
+        )
+        container.add_item(ui.ActionRow(self.back_button, self.edit_button, self.withdraw_button))
 
         self.add_item(container)
 
         self.set_status()
-
 
     #################################
     # Drowdown subclass
@@ -296,10 +308,7 @@ class DivTeamEditView(SessionView):
                     label = f"{div_team.name} (current)"
                 else:
                     label = f"{div_team.name}"
-                options.append(discord.SelectOption(label=label, 
-                                        description=None, 
-                                        value=div_team.id
-                ))
+                options.append(discord.SelectOption(label=label, description=None, value=div_team.id))
             super().__init__(options=options)
 
         async def callback(self, interaction: discord.Interaction):
@@ -308,19 +317,17 @@ class DivTeamEditView(SessionView):
 
             # Set default dropdown option to user's selection
             for option in self.options:
-                option.default = (int(option.value) == int(self.values[0]))
+                option.default = int(option.value) == int(self.values[0])
 
             self.parent_view.set_status()
             await interaction.response.edit_message(view=self.parent_view)
-
 
     ###########################
     # Class methods
     ###########################
 
     def set_status(self) -> None:
-        """ Enable/disable Continue button and set status textbox.
-        """
+        """Enable/disable Continue button and set status textbox."""
         # Find div_team with dropdown choice id
         if not self.choice:
             self.edit_button.disabled = True
@@ -354,10 +361,8 @@ class DivTeamEditView(SessionView):
             # this screen is built, so a fresh view starts from the real state.
             self.edit_button.disabled = True
 
-
     def apply_choice(self, session) -> None:
-        """ self.choice is the division/team the dropdown is sitting on.
-        """
+        """self.choice is the division/team the dropdown is sitting on."""
         session.new_div_team_id = self.choice
 
 
@@ -380,30 +385,32 @@ class ConfirmView(SessionView):
             case _:
                 raise ValueError(f"Self.div_team must be 'division' or 'team', not {div_team_str}")
 
-        choice_text = f"### {event.event_name}\n\t{discord_timestamp(event.start_time, "long")}\n"
+        choice_text = f"### {event.event_name}\n\t{discord_timestamp(event.start_time, 'long')}\n"
         if div_team_str != DivTeam.NEITHER:
             choice_text += f"**{div_team_str.capitalize()}**\n\t{div_team_name}"
-        confirm_text = f"### Are you ready! Confirm below."
+        confirm_text = "### Are you ready! Confirm below."
 
         container = ui.Container()
         container.add_item(ui.TextDisplay(content="# Confirm Your Choice"))
         container.add_item(ui.Separator(spacing=discord.SeparatorSpacing.small))
         container.add_item(ui.TextDisplay(content=f"{choice_text}\n\n\n\n{confirm_text}"))
 
-        self.affirm_button = GenericButton(parent_view=self, 
-                                selection_id=None, 
-                                button_label="Let's Go!", 
-                                button_color=discord.ButtonStyle.green, 
-                                button_disabled=False, 
-                                next_step=NextStep.COMMIT_ADD
-                                    )
-        self.cancel_button = GenericButton(parent_view=self, 
-                                selection_id=None, 
-                                button_label="Nevermind", 
-                                button_color=discord.ButtonStyle.red, 
-                                button_disabled=False, 
-                                next_step=NextStep.MENU
-                                            )
+        self.affirm_button = GenericButton(
+            parent_view=self,
+            selection_id=None,
+            button_label="Let's Go!",
+            button_color=discord.ButtonStyle.green,
+            button_disabled=False,
+            next_step=NextStep.COMMIT_ADD,
+        )
+        self.cancel_button = GenericButton(
+            parent_view=self,
+            selection_id=None,
+            button_label="Nevermind",
+            button_color=discord.ButtonStyle.red,
+            button_disabled=False,
+            next_step=NextStep.MENU,
+        )
 
         container.add_item(ui.ActionRow(self.affirm_button, self.cancel_button))
         self.add_item(container)
@@ -428,39 +435,134 @@ class ConfirmWithdrawlView(SessionView):
             case _:
                 raise ValueError(f"Self.div_team must be 'division' or 'team', not {div_team_str}")
 
-        choice_text = f"### {event.event_name}\n\t{discord_timestamp(event.start_time, "long")}\n"
+        choice_text = f"### {event.event_name}\n\t{discord_timestamp(event.start_time, 'long')}\n"
         if div_team_str != DivTeam.NEITHER:
             choice_text += f"**{div_team_str.capitalize()}**\n\t{div_team_name}"
-        confirm_text = f"### Are you sure you want to withdraw your registration?"
+        confirm_text = "### Are you sure you want to withdraw your registration?"
 
         container = ui.Container()
         container.add_item(ui.TextDisplay(content="# Withdraw Your Registration?"))
         container.add_item(ui.Separator(spacing=discord.SeparatorSpacing.small))
         container.add_item(ui.TextDisplay(content=f"{choice_text}\n\n\n\n{confirm_text}"))
 
-        self.affirm_button = GenericButton(parent_view=self, 
-                                        selection_id=None, 
-                                        button_label="Withdraw", 
-                                        button_color=discord.ButtonStyle.red, 
-                                        button_disabled=False, 
-                                        next_step=NextStep.COMMIT_WITHDRAW
-                                            )
-        self.cancel_button = GenericButton(parent_view=self, 
-                                        selection_id=None, 
-                                        button_label="Nevermind", 
-                                        button_color=discord.ButtonStyle.gray, 
-                                        button_disabled=False, 
-                                        next_step=NextStep.MENU
-                                            )
-        container.add_item(ui.ActionRow(
-            self.affirm_button,
-            self.cancel_button)
-            )
+        self.affirm_button = GenericButton(
+            parent_view=self,
+            selection_id=None,
+            button_label="Withdraw",
+            button_color=discord.ButtonStyle.red,
+            button_disabled=False,
+            next_step=NextStep.COMMIT_WITHDRAW,
+        )
+        self.cancel_button = GenericButton(
+            parent_view=self,
+            selection_id=None,
+            button_label="Nevermind",
+            button_color=discord.ButtonStyle.gray,
+            button_disabled=False,
+            next_step=NextStep.MENU,
+        )
+        container.add_item(ui.ActionRow(self.affirm_button, self.cancel_button))
         self.add_item(container)
 
 
 class ExitView(SessionView):
-    def __init__(self):
+    """ The last screen of the flow.
+
+        Terminal in the strict sense: no buttons, no timeout, and the message is
+        ephemeral, so there is nothing left for the user to click. Anything the
+        copy tells them to do next has to be `/ggp_register` again.
+
+        Three shapes, depending on how much the session got to know:
+          - nothing loaded, because the user left at the rules screen
+          - loaded, but the user is signed up for nothing
+          - loaded, with registrations to confirm back
+    """
+
+    def __init__(self, events: list[Event] | None = None, user: UserRegistrations | None = None):
         super().__init__(timeout=None)  # terminal screen: nothing to time out
 
-        self.add_item(ui.Container(ui.TextDisplay("Thank you!")))
+        settings = get_settings()
+        self.rules = channel_mention(settings.rules_channel_id, "the rules channel")
+        self.help = channel_mention(settings.help_channel_id, "the help channel")
+        self.faq = channel_mention(settings.faq_channel_id, "the FAQ channel")
+
+        if user is None:
+            self.add_item(self.farewell_container())
+            return
+
+        summary = registered_summary(events or [], user)
+        if not summary:
+            self.add_item(self.nothing_registered_container())
+            return
+
+        self.add_item(self.registered_container(summary))
+
+    ###########################
+    # Containers
+    ###########################
+
+    def farewell_container(self) -> ui.Container:
+        """ The user left before anything was loaded, so claim nothing about
+            what they are or are not signed up for.
+        """
+        container = ui.Container(accent_colour=discord.Colour.light_grey())
+        container.add_item(ui.TextDisplay(
+            "### Thanks for stopping by\n"
+            "Run `/ggp_register` whenever you're ready — the door is always open.\n"
+            f"Questions? Ask in {self.help} — there is no such thing as a dumb one."))
+        return container
+
+    def nothing_registered_container(self) -> ui.Container:
+        container = ui.Container(accent_colour=discord.Colour.light_grey())
+        container.add_item(ui.TextDisplay(
+            "### Nothing registered — no problem\n"
+            f"You are not signed up for any upcoming events. {self.rules} and {self.faq} are "
+            "a good look at what an event involves, and `/ggp_register` is there whenever "
+            "you change your mind.\n"
+            f"Questions? Ask in {self.help} — there is no such thing as a dumb one."))
+        return container
+
+    def registered_container(
+        self, summary: list[tuple[Event, DivTeam | None, str | None]]
+    ) -> ui.Container:
+        container = ui.Container(accent_colour=discord.Colour.green())
+        container.add_item(ui.TextDisplay(content="# You're all set — see you on track!"))
+        container.add_item(ui.Separator(spacing=discord.SeparatorSpacing.small))
+        container.add_item(ui.TextDisplay(content=self.registrations_text(summary)))
+        container.add_item(ui.Separator(spacing=discord.SeparatorSpacing.small))
+        container.add_item(ui.TextDisplay(content=self.next_steps_text(summary)))
+        return container
+
+    ###########################
+    # Copy
+    ###########################
+
+    @staticmethod
+    def registrations_text(summary: list[tuple[Event, DivTeam | None, str | None]]) -> str:
+        plural = "" if len(summary) == 1 else "s"
+        text = f"**Registered for {len(summary)} event{plural}**"
+
+        for event, div_team_str, div_team_name in summary:
+            text += (f"\n### {event.event_name}\n"
+                     f"{discord_timestamp(event.start_time, 'full')} "
+                     f"({discord_timestamp(event.start_time, 'relative')})")
+            if div_team_name:
+                text += f"\n{div_team_str.capitalize()}: **{div_team_name}**"
+
+        return text
+
+    def next_steps_text(self, summary: list[tuple[Event, DivTeam | None, str | None]]) -> str:
+        text = ("**Before race day**\n"
+                "Read the rules for each event you signed up for — they are in "
+                f"{self.rules}, and {self.faq} covers the questions that come up most.")
+
+        if any(div_team_name for _, _, div_team_name in summary):
+            # Only worth saying when the user actually picked something that can move.
+            text += ("\nDivision and team placements are confirmed closer to the event; "
+                     "watch for a ping.")
+
+        text += ("\n\n**Changed your mind?** Run `/ggp_register` again any time to edit or "
+                 "withdraw.\n"
+                 f"Questions? Ask in {self.help} — there is no such thing as a dumb one.")
+
+        return text
