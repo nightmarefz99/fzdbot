@@ -9,11 +9,11 @@ from fzdbot.views.common import GenericButton, SessionView
 
 
 def channel_mention(channel_id: int | None, fallback: str) -> str:
-    """ A clickable channel, or a readable name when the id is not configured.
+    """A clickable channel, or a readable name when the id is not configured.
 
-        `<#id>` is preferred over a link button or a hard-coded #name: Discord
-        renders it with the channel's current name, so a rename does not leave
-        stale copy behind.
+    `<#id>` is preferred over a link button or a hard-coded #name: Discord
+    renders it with the channel's current name, so a rename does not leave
+    stale copy behind.
     """
     return f"<#{channel_id}>" if channel_id else fallback
 
@@ -466,16 +466,16 @@ class ConfirmWithdrawlView(SessionView):
 
 
 class ExitView(SessionView):
-    """ The last screen of the flow.
+    """The last screen of the flow.
 
-        Terminal in the strict sense: no buttons, no timeout, and the message is
-        ephemeral, so there is nothing left for the user to click. Anything the
-        copy tells them to do next has to be `/ggp_register` again.
+    Terminal in the strict sense: no buttons, no timeout, and the message is
+    ephemeral, so there is nothing left for the user to click. Anything the
+    copy tells them to do next has to be `/ggp_register` again.
 
-        Three shapes, depending on how much the session got to know:
-          - nothing loaded, because the user left at the rules screen
-          - loaded, but the user is signed up for nothing
-          - loaded, with registrations to confirm back
+    Three shapes, depending on how much the session got to know:
+      - nothing loaded, because the user left at the rules screen
+      - loaded, but the user is signed up for nothing
+      - loaded, with registrations to confirm back
     """
 
     def __init__(self, events: list[Event] | None = None, user: UserRegistrations | None = None):
@@ -502,31 +502,35 @@ class ExitView(SessionView):
     ###########################
 
     def farewell_container(self) -> ui.Container:
-        """ The user left before anything was loaded, so claim nothing about
-            what they are or are not signed up for.
+        """The user left before anything was loaded, so claim nothing about
+        what they are or are not signed up for.
         """
         container = ui.Container(accent_colour=discord.Colour.light_grey())
-        container.add_item(ui.TextDisplay(
-            "### Thanks for stopping by\n"
-            "Run `/ggp_register` whenever you're ready — the door is always open.\n"
-            f"Questions? Ask in {self.help} — there is no such thing as a dumb one."))
+        container.add_item(
+            ui.TextDisplay(
+                "### Thanks for stopping by\n"
+                "Run `/ggp_register` whenever you're ready. The door is always open.\n"
+                f"Questions? Ask in {self.help} - there is no such thing as a dumb one."
+            )
+        )
         return container
 
     def nothing_registered_container(self) -> ui.Container:
         container = ui.Container(accent_colour=discord.Colour.light_grey())
-        container.add_item(ui.TextDisplay(
-            "### Nothing registered — no problem\n"
-            f"You are not signed up for any upcoming events. {self.rules} and {self.faq} are "
-            "a good look at what an event involves, and `/ggp_register` is there whenever "
-            "you change your mind.\n"
-            f"Questions? Ask in {self.help} — there is no such thing as a dumb one."))
+        container.add_item(
+            ui.TextDisplay(
+                "### Nothing registered. No problem\n"
+                f"You are not signed up for any upcoming events. {self.rules} and {self.faq} are "
+                "a good look at what an event involves, and `/ggp_register` is there whenever "
+                "you change your mind.\n"
+                f"Questions? Ask in {self.help} - there is no such thing as a dumb one."
+            )
+        )
         return container
 
-    def registered_container(
-        self, summary: list[tuple[Event, DivTeam | None, str | None]]
-    ) -> ui.Container:
+    def registered_container(self, summary: list[tuple[Event, DivTeam | None, str | None]]) -> ui.Container:
         container = ui.Container(accent_colour=discord.Colour.green())
-        container.add_item(ui.TextDisplay(content="# You're all set — see you on track!"))
+        container.add_item(ui.TextDisplay(content="# You're all set - see you on track!"))
         container.add_item(ui.Separator(spacing=discord.SeparatorSpacing.small))
         container.add_item(ui.TextDisplay(content=self.registrations_text(summary)))
         container.add_item(ui.Separator(spacing=discord.SeparatorSpacing.small))
@@ -543,26 +547,31 @@ class ExitView(SessionView):
         text = f"**Registered for {len(summary)} event{plural}**"
 
         for event, div_team_str, div_team_name in summary:
-            text += (f"\n### {event.event_name}\n"
-                     f"{discord_timestamp(event.start_time, 'full')} "
-                     f"({discord_timestamp(event.start_time, 'relative')})")
+            text += (
+                f"\n### {event.event_name}\n"
+                f"{discord_timestamp(event.start_time, 'full')} "
+                f"({discord_timestamp(event.start_time, 'relative')})"
+            )
             if div_team_name:
                 text += f"\n{div_team_str.capitalize()}: **{div_team_name}**"
 
         return text
 
     def next_steps_text(self, summary: list[tuple[Event, DivTeam | None, str | None]]) -> str:
-        text = ("**Before race day**\n"
-                "Read the rules for each event you signed up for — they are in "
-                f"{self.rules}, and {self.faq} covers the questions that come up most.")
+        text = (
+            "**Before race day**\n"
+            "Read the rules for each event you signed up for. They are in "
+            f"{self.rules}, and {self.faq} covers the questions that come up most."
+        )
 
         if any(div_team_name for _, _, div_team_name in summary):
             # Only worth saying when the user actually picked something that can move.
-            text += ("\nDivision and team placements are confirmed closer to the event; "
-                     "watch for a ping.")
+            text += "\nDivision and team placements are confirmed closer to the event; watch for a ping."
 
-        text += ("\n\n**Changed your mind?** Run `/ggp_register` again any time to edit or "
-                 "withdraw.\n"
-                 f"Questions? Ask in {self.help} — there is no such thing as a dumb one.")
+        text += (
+            "\n\n**Changed your mind?** Run `/ggp_register` again any time to edit or "
+            "withdraw.\n"
+            f"Questions? Ask in {self.help} - there is no such thing as a dumb one."
+        )
 
         return text
