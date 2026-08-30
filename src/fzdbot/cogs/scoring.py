@@ -3,6 +3,7 @@
 
 import logging
 
+import time
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -11,12 +12,15 @@ from fzdbot.error_alerts import send_error_alert
 from fzdbot.utils.db_utils import get_or_create_db_user
 from fzdbot.fzd_db import (
     check_for_active_event,
+    get_user_id,
     delete_score,
     edit_score,
     get_db_connection,  # connect_to_database
     get_machines,
     get_user_scores,
+    get_event_lineus_and_scores,
     submit_score,
+    submit_score_sql
 )
 from fzdbot.settings import get_settings
 from fzdbot.views.confirm_delete import ConfirmDeleteScore
@@ -26,6 +30,14 @@ logger = logging.getLogger(__name__)
 
 
 class Scoring(commands.Cog):
+    # Set the autocomplete cache and cache expiration
+    _OPTIONS_CACHE = {
+        "race_options": [], # list of full dictionary
+        "race_option_list": [], # list of lineup_id and combined string
+        "last_updated": 0
+    }
+    _ACTIVE_TTL_SECONDS: int = 10
+
     def __init__(self, bot: commands.Bot, machine_dict: list[dict[str, str]]):
         self.bot = bot
         self.machine_dict = machine_dict
@@ -46,7 +58,7 @@ class Scoring(commands.Cog):
     )  # , guild=GUILD_ID)
     @app_commands.describe(score="Enter an integer value for the score during an event")
     @app_commands.describe(machine="Select the machine used")
-    async def add_score(self, interaction: discord.Interaction, score: str, machine: str = None):
+    async def add_score(self, interaction: discord.Interaction, score: str, machine: str = None, lineup: str = None):
         maxscore = 1000000  # arbitrarily set for now
         try:
             if int(score) < 0:
@@ -72,10 +84,14 @@ class Scoring(commands.Cog):
             if machine not in machine_list and machine is not None:
                 await InputWarnings.machine_not_found(interaction, machine, machine_list)
                 return
+            if not any(option.get("event_lineup_id") == int(lineup) for option in self._OPTIONS_CACHE["race_options"]) and lineup is not None:
+                await InputWarnings.lineup_not_found(interaction)
+                return
             if current_event.get("is_machine_input_required") is True and machine is None:
                 await InputWarnings.machine_needed(interaction)
                 return
 
+            # Process machine info
             if machine is not None:
                 machine_choice = next(
                     (item for item in self.machine_dict if item.get("name") == machine), None
@@ -92,11 +108,13 @@ class Scoring(commands.Cog):
                 int(score),
                 current_event["scoring_method"],
                 machine_choice_id,
+                int(lineup),
             ]
 
             # Add score to database
             async with get_db_connection() as db:
-                return_score = await submit_score(db, user_data)  # interaction.user
+                return_score = await submit_score_sql(db, user_data)  # interaction.user
+                print(f"return_score: {return_score}")
             await interaction.response.send_message(
                 f"✅ User {interaction.user} has entered a score of {return_score} to {current_event['name']} using machine {machine_choice_name}"
             )  # , ephemeral=True)
@@ -232,7 +250,7 @@ class Scoring(commands.Cog):
             )
 
     # ------------------------------------------------------------------
-    # Autocomplete handler for editScore and deleteScore
+    # Autocomplete handlers
     # ------------------------------------------------------------------
     async def user_scores_autocomplete(self, interaction: discord.Interaction, current: str):
         async with get_db_connection() as db:
@@ -243,6 +261,7 @@ class Scoring(commands.Cog):
         # Return up to 25 results (discord limit)
         return [app_commands.Choice(name=opt, value=f"{opt}|{idopt}") for opt, idopt in choices[:25]]
 
+
     async def user_scores_autocomplete_nokingmaker(self, interaction: discord.Interaction, current: str):
         async with get_db_connection() as db:
             user_scores = await get_user_scores(db, interaction.user.name, check_for_score_method=True)
@@ -252,12 +271,54 @@ class Scoring(commands.Cog):
         # Return up to 25 results (discord limit)
         return [app_commands.Choice(name=opt, value=f"{opt}|{idopt}") for opt, idopt in choices[:25]]
 
+
     async def machine_autocomplete(
         self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[str]]:
         machine_list = [s["name"] for s in self.machine_dict if "name" in s]
         options = [machine for machine in machine_list if current.lower() in machine.lower()]
         return [app_commands.Choice(name=machine, value=machine) for machine in options[:4]]
+
+
+    async def lineup_score_autocomplete(self, 
+            interaction: discord.Interaction, 
+            current: str) -> list[app_commands.Choice[str]]:
+        clock = time.monotonic()
+
+        if self._OPTIONS_CACHE["race_options"] is not None and clock - self._OPTIONS_CACHE["last_updated"] < self._ACTIVE_TTL_SECONDS:
+            # Use existing cache values
+            options = self._OPTIONS_CACHE["race_option_list"]
+            return [app_commands.Choice(name=option["name"], value=option["value"]) for option in options[:25]]
+        else:
+            # Get lineup information from database
+            async with get_db_connection() as db:
+                active_event = await check_for_active_event(db)
+                user_id = await get_user_id(db, interaction.user.name)
+                if user_id:
+                    lineup_dict_list = await get_event_lineus_and_scores(db, active_event["id"], user_id)
+
+            self._OPTIONS_CACHE["race_options"] = lineup_dict_list
+            self._OPTIONS_CACHE["last_updated"] = time.monotonic()
+
+            if not active_event:
+                return [app_commands.Choice(name="No active event", value="-1")]
+            if not user_id:
+                return [app_commands.Choice(name="No user id. Use command `/fzd_set_name` to add yourself.", value="-2")]
+            if not lineup_dict_list:
+                return [app_commands.Choice(name="No lineups are available for this event.", value="-3")]
+                    
+            else:
+                self._OPTIONS_CACHE["race_option_list"] = []
+                for lineup_dict in lineup_dict_list:
+                    lineup_string = f"{lineup_dict["lineup_num"]}: {lineup_dict["lineup_name"]}"
+                    if lineup_dict["score"]:
+                        lineup_string += f" - score {lineup_dict["score"]}"
+                    self._OPTIONS_CACHE["race_option_list"].append({"name": lineup_string, "value": lineup_dict["event_lineup_id"]})
+
+                options = [opt for opt in self._OPTIONS_CACHE["race_option_list"] if current.lower() in opt["name"].lower()]
+                # Note discord limit is 25 options; only first 25 options provided if exceeded.
+                return [app_commands.Choice(name=option["name"], value=str(option["value"])) for option in options[:25]]
+            
 
     # =============================================================================================================
     #   /edit_score
@@ -402,6 +463,7 @@ class Scoring(commands.Cog):
         self.editScore.autocomplete("old_score")(self.user_scores_autocomplete_nokingmaker)
         self.deleteScore.autocomplete("score_to_delete")(self.user_scores_autocomplete)
         self.add_score.autocomplete("machine")(self.machine_autocomplete)
+        self.add_score.autocomplete("lineup")(self.lineup_score_autocomplete)
         self.add_rank.autocomplete("machine")(self.machine_autocomplete)
 
 

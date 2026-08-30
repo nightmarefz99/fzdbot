@@ -121,7 +121,7 @@ async def get_event_types(db):
     return eventtypes  # [{'id': 7, 'name': 'Weekly Classic Mini'} . . .
 
 
-async def get_user_id(db, discord_id: str):
+async def get_user_id(db, discord_id: str) -> int:
     """Given a discord user id (discord_id), returns the database
     id of that user
     """
@@ -190,12 +190,70 @@ async def check_for_active_event(db, hours_from_now: int = 0):
 async def submit_score(db, dataentry) -> int:
     """Executes sql query command to insert data to database
     db = database connection object
-    dataentry = [ user_id, scheduled_event_id, score ] - all integers
+    dataentry = [ user_id, scheduled_event_id, score, scoring_method, machine_choice_id ] 
+        - all integers except `scoring_method`, which is a string enum ["points", "rank"]
     """
     sql_newrow = "sp_insert_score"
     dataentry.append("NULL")  # fifth argument is what will be returned...handled by "fetch" in python
     score = await execute_query(db, sql_newrow, params=dataentry, fetch="one", isProc=True)
     return int(score["@sp_output_score"])
+
+
+async def submit_score_sql(db, dataentry) -> int:
+    """Executes sql query command to insert data to database
+        THIS VERSION 1) Uses SQL instead of a stored procedure, and 2) adds the lineup_id if it exists
+        db = database connection object
+        dataentry = [ user_id, scheduled_event_id, score, scoring_method, machine_choice_id, lineup_id ] 
+            - all integers except `scoring_method`, which is a string enum ["points", "rank"]
+    """
+    sql_new_row = """   REPLACE INTO event_result_points
+                            (scheduled_event_id, event_lineup_id, user_id, team_id, division_id, machine_id, score)
+
+                        SELECT 
+                            %s AS scheduled_event_id, 
+                            %s AS event_lineup_id,
+                            %s AS user_id, 
+                            teams.team_id, 
+                            divisions.division_id,
+                            machines.id,
+                            CASE 
+                                WHEN es.scoring_method = 'points' THEN COALESCE(%s, 0)
+                                WHEN es.scoring_method = 'placement' THEN COALESCE(kp.points + kp.bonus_points, 0)
+                                ELSE 0
+                            END AS score
+                        FROM events_scheduled es
+
+                        LEFT JOIN kingmaker_points kp 
+                            ON kp.mode = es.mode AND kp.placement = %s
+                        LEFT JOIN (
+                            SELECT ut.user_id, ut.team_id
+                            FROM user_teams ut
+                            JOIN teams t ON t.id = ut.team_id
+                            WHERE t.scheduled_event_id = %s
+                        ) teams ON teams.user_id = %s
+                        LEFT JOIN (
+                            SELECT ud.user_id, ud.division_id
+                            FROM user_divisions ud
+                            JOIN divisions d ON d.id = ud.division_id
+                            WHERE d.scheduled_event_id = %s
+                        ) divisions ON divisions.user_id = %s
+                        LEFT JOIN machines 
+                            ON machines.id = %s
+                        LEFT JOIN event_lineups ON event_lineups.id = %s
+                        WHERE es.id = %s
+                    """
+    print(f"scheduled_event_id: {dataentry[1]}")
+    print(f"lineup_id: {dataentry[5]}")
+    print(f"user_id: {dataentry[0]}")
+    print(f"score: {dataentry[2]}")
+    print(f"machine_id: {dataentry[4]}")
+    params = (dataentry[1], dataentry[5], dataentry[0],
+              dataentry[2], dataentry[2], dataentry[1],
+              dataentry[0], dataentry[1], dataentry[0],
+              dataentry[4], dataentry[5], dataentry[1],)
+    print("made it here")
+    await execute_query(db, sql_new_row, params=params, fetch=None, isProc=False)
+    return dataentry[2]
 
 
 async def edit_score(db, dataentry) -> None:
@@ -1065,3 +1123,27 @@ async def get_machine_config_db(db, scheduled_event_id: int) -> tuple[int, dict]
         return config_dict["config_id"], m_dict
     else:
         return None, m_dict
+
+
+async def get_event_lineus_and_scores(db, scheduled_event_id: int, user_id: int) -> list[dict]:
+    """
+    """
+    sql_lineup_and_score =  """ SELECT el.id AS event_lineup_id,
+                                    el.lineup_num AS lineup_num,
+                                    l.name AS lineup_name,
+                                    ep.score AS score
+                                FROM event_lineups el
+                                INNER JOIN lineups l
+                                ON l.id = el.lineup_id AND el.scheduled_event_id = %s
+                                LEFT JOIN event_result_points ep
+                                ON el.id = ep.event_lineup_id
+                                    AND el.scheduled_event_id = %s
+                                    AND ep.user_id = %s
+                            """
+    params = (scheduled_event_id, scheduled_event_id, user_id,)
+    lineup_score_dict = await execute_query(db, sql_lineup_and_score, params=params, fetch="all", isProc=False)
+
+    if lineup_score_dict:
+        return lineup_score_dict
+    else:
+        return None

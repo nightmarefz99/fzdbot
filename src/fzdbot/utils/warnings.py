@@ -79,6 +79,12 @@ class InputWarnings():
             ephemeral=True,
         )
 
+    @staticmethod
+    async def lineup_not_found(interaction: discord.Interaction):
+        await interaction.response.send_message(
+                    f"⚠️  Warning: Lineup provided not one of the available options. Score not added.",
+                    ephemeral=True,
+                )
 
     @staticmethod
     async def machine_needed(interaction: discord.Interaction):
