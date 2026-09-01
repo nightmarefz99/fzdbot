@@ -2,13 +2,14 @@ from typing import Literal, Self
 from datetime import datetime
 import asyncio
 import discord
-from fzdbot.utils.view_utils import discord_timestamp
+from fzdbot.utils.view_utils import DivTeam, discord_timestamp
 from fzdbot.utils.db_utils import get_or_create_db_user
 from fzdbot.fzd_db import (
     get_db_connection,
     get_registration_events,
     get_event_description,
     get_registration_period,
+    get_divteam_capacity,
     get_event_divisions,
     get_event_teams,
     get_machine_config_db,
@@ -23,6 +24,30 @@ from fzdbot.fzd_db import (
     update_event_machines,
     update_event_race_options
 )
+
+
+def is_full(capacity: int | None, num_registered: int) -> bool:
+    """ Whether a division or team has no room left.
+
+        Capacity is nullable, and a NULL one is uncapped: there is no number
+        to reach, so it is never full.
+    """
+    return capacity is not None and num_registered >= capacity
+
+
+async def divteam_is_full(div_team_str: DivTeam, div_team_id: int) -> bool:
+    """ The same question, answered from the database at the moment it is asked.
+
+        The Event behind a screen is a snapshot taken when the session opened.
+        This is not, which is what makes it worth asking twice.
+    """
+    div_team = "divisions" if div_team_str == DivTeam.DIVISION else "teams"
+    async with get_db_connection() as db:
+        row = await get_divteam_capacity(db, div_team, div_team_id)
+    if row is None:
+        return False
+    return is_full(row["capacity"], row["num_registered"])
+
 
 class Event():
     def __init__(self):
@@ -358,10 +383,7 @@ class Division():
 
     @property
     def at_capacity(self) -> bool:
-        if not self.capacity:
-            return False
-        else:
-            return self.num_registered >= self.capacity
+        return is_full(self.capacity, self.num_registered)
         
 
     def __repr__(self) -> str:
@@ -385,7 +407,7 @@ class Division():
                     division_string += f"\t**Name:** {self.name}\n"
                     division_string += f"\t\t**Alternate Name:** {self.alt_name}\n"
                     division_string += f"\t\t**Emote:** {self.emote}\n"
-                    division_string += f"\t\t**Capacity:** {self.capacity}\n"
+                    division_string += f"\t\t**Capacity:** {self.capacity or 'no cap'}\n"
                     return division_string
             case _:
                 raise ValueError("Unknown format specifier...")
@@ -419,10 +441,7 @@ class Team():
 
     @property
     def at_capacity(self) -> bool:
-        if not self.capacity:
-            return False
-        else:
-            return self.num_registered >= self.capacity
+        return is_full(self.capacity, self.num_registered)
     
 
     def __repr__(self) -> str:

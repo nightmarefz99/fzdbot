@@ -10,7 +10,7 @@ from fzdbot.fzd_db import (
     get_registration_events,
     get_stats_99_options_db
 )
-from fzdbot.utils.event_class import Event, UserRegistrations, UserStats
+from fzdbot.utils.event_class import Event, UserRegistrations, UserStats, divteam_is_full
 from fzdbot.utils.view_utils import NextStep, DivTeam
 from fzdbot.utils.db_utils import refresh_event_list, registration_update_db, get_or_create_db_user
 from fzdbot.views.common import SessionView
@@ -77,6 +77,7 @@ class RegSession:
         self.new_div_team_id: int | None = None  # what the user is asking for
         self.user_stats: UserStats | None = None
         self.pending_step: NextStep | None = None  # where to resume after the stats screen
+        self.notice: str | None = None  # one line for the menu to show on arrival
 
 
     #############################################
@@ -176,7 +177,8 @@ class RegSession:
                     await self._ack(interaction)
                 await self.ready()
                 self.clear_selection()
-                return RegisterMenuView(self.events, self.user)
+                notice, self.notice = self.notice, None
+                return RegisterMenuView(self.events, self.user, notice)
 
             case NextStep.STATS:
                 return await self._stats_view(interaction)
@@ -315,8 +317,29 @@ class RegSession:
     # Database writes
     #############################################
 
+    def _div_team_name(self, div_team_id: int) -> str:
+        """ The name the user saw on the dropdown, for talking back to them.
+        """
+        pool = self.selected_event.divisions or self.selected_event.teams
+        return next((dt.name for dt in pool if dt.id == div_team_id), str(div_team_id))
+
+
     async def _commit_add(self, interaction: discord.Interaction) -> None:
         await self._ack(interaction)
+
+        if await divteam_is_full(self.div_team_str, self.new_div_team_id):
+            # The screen the user chose from was built when the session
+            # opened, so a capped division can fill between choosing it and
+            # confirming. This is the only count read at the moment of the
+            # write; nothing downstream reads one.
+            self.notice = (f"**{self._div_team_name(self.new_div_team_id)}** filled up while you "
+                           f"were choosing, so nothing was registered. "
+                           f"Pick another {self.div_team_str}.")
+            logger.info("%s not added to %s: %s %s is full", interaction.user.name,
+                        self.selected_event.event_name, self.div_team_str, self.new_div_team_id)
+            self.events = await EventRegister.get_event_information()
+            return
+
         await registration_update_db(db_user_id=self.user.db_id,
                                      scheduled_event_id=self.selected_event.scheduled_event_id,
                                      div_team_str=self.div_team_str,

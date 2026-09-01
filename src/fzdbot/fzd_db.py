@@ -452,6 +452,25 @@ async def get_event_teams(db, event_id):
         return None
 
 
+async def get_divteam_capacity(db, div_team: Literal["divisions", "teams"], div_team_id: int):
+    """ The capacity of one division or team and how many are registered in it.
+
+        `capacity` is NULL on a division that is not capped.
+    """
+    membership_table, id_column = {
+        "divisions": ("user_divisions", "division_id"),
+        "teams": ("user_teams", "team_id"),
+    }[div_team]
+    sql_getdivteamcapacity = f"""SELECT A.capacity AS capacity,
+                             (SELECT COUNT(*)
+                                 FROM {membership_table} M
+                                 WHERE M.{id_column} = A.id) AS num_registered
+                             FROM {div_team} A
+                             WHERE A.id = %s"""
+    return await execute_query(db, sql_getdivteamcapacity,
+                               params=(div_team_id,), fetch="one", isProc=False)
+
+
 async def add_user_to_division(db, dataentry):
     """ Executes sql query command to insert data to database
         db = database connection object

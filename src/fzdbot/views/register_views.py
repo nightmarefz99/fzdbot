@@ -18,6 +18,17 @@ def channel_mention(channel_id: int | None, fallback: str) -> str:
     return f"<#{channel_id}>" if channel_id else fallback
 
 
+def room_left(div_team: Division | Team) -> str:
+    """What the status line says about a division or team that has room in it.
+
+    A division whose capacity is NULL is not capped, and there is no number of
+    spots to count down for one.
+    """
+    if div_team.capacity is None:
+        return f"Open - {div_team.num_registered} registered"
+    return f"{div_team.capacity - div_team.num_registered} spots available!"
+
+
 #################################
 # LayoutView classes
 #################################
@@ -71,12 +82,15 @@ Please confirm that you will read and follow the rules for each event you regist
 
 
 class RegisterMenuView(SessionView):
-    def __init__(self, events: list[Event], user: UserRegistrations):
+    def __init__(self, events: list[Event], user: UserRegistrations, notice: str | None = None):
         super().__init__()
 
         container = ui.Container()
         container.add_item(ui.TextDisplay(content="# Register for an Event"))
         container.add_item(ui.Separator(spacing=discord.SeparatorSpacing.small))
+        if notice:
+            container.add_item(ui.TextDisplay(content=notice))
+            container.add_item(ui.Separator(spacing=discord.SeparatorSpacing.small))
 
         # Build sections for each event in events
         section_text: list[ui.TextDisplay] = []
@@ -229,7 +243,7 @@ class DivTeamAddView(SessionView):
             self.status_text.content = f"{self.div_team_string.capitalize()} {div_team.name} full!"
         else:
             self.continue_button.disabled = False
-            self.status_text.content = f"{div_team.capacity - div_team.num_registered} spots available!"
+            self.status_text.content = room_left(div_team)
             self.continue_button.selection_id = self.choice
 
     def apply_choice(self, session) -> None:
@@ -350,7 +364,7 @@ class DivTeamEditView(SessionView):
             self.status_text.content = f"{self.div_team_string.capitalize()} {div_team.name} full!"
         else:
             self.edit_button.disabled = False
-            self.status_text.content = f"{div_team.capacity - div_team.num_registered} spots available!"
+            self.status_text.content = room_left(div_team)
             self.edit_button.selection_id = self.choice
 
         if self.choice == self.existing_div_team_id:
