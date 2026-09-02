@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     db_host: str = "localhost"
     db_port: int = 3306
 
+    fzd_api_base_url: str
+    fzd_api_key: str
+
     log_level: str = "INFO"
     error_alert_channel_id: int | None = 1186081056143708250
     # Server channels the registration flow points users at. Optional: the copy
