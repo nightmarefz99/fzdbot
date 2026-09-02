@@ -1,18 +1,15 @@
 import time
 import asyncio
 import logging
+from datetime import datetime, timezone
 import discord
 from discord import app_commands
 from discord.ext import commands
 from fzdbot.settings import get_settings
-from fzdbot.fzd_db import (
-    get_db_connection, 
-    get_registration_events,
-    get_stats_99_options_db
-)
-from fzdbot.utils.event_class import Event, UserRegistrations, UserStats, divteam_is_full
+from fzdbot.fzd_api import FzdApiError
+from fzdbot.utils.event_class import Event, UserRegistrations, UserStats
+from fzdbot.utils.user_utils import default_display_name
 from fzdbot.utils.view_utils import NextStep, DivTeam
-from fzdbot.utils.db_utils import refresh_event_list, registration_update_db, get_or_create_db_user
 from fzdbot.views.common import SessionView
 from fzdbot.views.register_views import (
     CancelView,
@@ -25,7 +22,6 @@ from fzdbot.views.register_views import (
     ExitView
 )
 from fzdbot.views.stats_menu_views import (
-        StatViewHistory99,
         StatViewHistoryClassic,
         BasicStatsView
 )
@@ -65,7 +61,6 @@ class RegSession:
         self.latest: discord.Interaction = interaction
 
         self.current_view: SessionView | None = None
-        self.user_id: int | None = None
         self.user: UserRegistrations | None = None
         self.events: list[Event] = []
         self._prefetch: asyncio.Task | None = None
@@ -78,6 +73,17 @@ class RegSession:
         self.user_stats: UserStats | None = None
         self.pending_step: NextStep | None = None  # where to resume after the stats screen
         self.notice: str | None = None  # one line for the menu to show on arrival
+
+        # The answer lists the stats screen offers. They arrive with the answers
+        # themselves, in the same call, so the screen needs no read of its own.
+        self.recent_options: list[dict] = []
+        self.self_eval_options: list[dict] = []
+
+
+    @property
+    def api(self):
+        """ The bot's API client. `Interaction.client` is the bot."""
+        return self.origin.client.api
 
 
     #############################################
@@ -106,18 +112,21 @@ class RegSession:
 
     async def _load(self) -> None:
         start = time.perf_counter()
-
-        async with get_db_connection() as db:
-            self.user_id = await get_or_create_db_user(db, self.origin.user)
-
-        async with asyncio.TaskGroup() as tg:
-            events_task = tg.create_task(EventRegister.get_event_information())
-            user_task = tg.create_task(EventRegister.get_user_reg_information(self.origin))
-
-        self.events = events_task.result()
-        self.user = user_task.result()
-        logger.info("ggp_register: initial database calls complete in %.4f seconds",
+        await self._read_registrations()
+        logger.info("ggp_register: initial API call complete in %.4f seconds",
                     time.perf_counter() - start)
+
+
+    async def _read_registrations(self) -> None:
+        """ The events, their groups and where this player stands, in one call.
+
+            The payload carries each group's capacity and headcount, so nothing
+            here counts anything, and the caller's registrations come off the
+            same answer rather than a second one.
+        """
+        payload = await self.api.registrations(self.origin.user.id, datetime.now(timezone.utc))
+        self.events = [Event.from_api(event) for event in payload]
+        self.user = UserRegistrations.from_api(self.origin, payload)
 
 
     async def ready(self) -> None:
@@ -150,8 +159,10 @@ class RegSession:
             # screen that was asked for.
             await self._ack(interaction)
             await self.ready()
-            self.user_stats = await UserStats.load_user_stats(
-                self.user_id, self.selected_event.scheduled_event_id)
+            (self.user_stats,
+             self.recent_options,
+             self.self_eval_options) = await UserStats.load_from_api(
+                self.api, interaction.user.id, self.selected_event.scheduled_event_id)
             if not self._stats_complete():
                 self.pending_step, step = step, NextStep.STATS
 
@@ -298,23 +309,23 @@ class RegSession:
 
 
     async def _stats_view(self, interaction: discord.Interaction) -> SessionView:
-        await self._ack(interaction)
-        async with get_db_connection() as db:
-            ggp_options, recent_options, self_eval_options = await get_stats_99_options_db(db)
+        """ The statistics screen, built from options already in hand.
 
+            No "99" screen: it asks about `stats_ggp_99`, and the API serves no
+            endpoint over that table, so there is nothing to build it from.
+        """
+        await self._ack(interaction)
         match self._stats_view_type():
-            case "99":
-                return StatViewHistory99(ggp_options, recent_options, self.user_stats)
             case "classic":
                 return StatViewHistoryClassic(self.user_stats)
             case "basic":
-                return BasicStatsView(recent_options, self_eval_options, self.user_stats)
+                return BasicStatsView(self.recent_options, self.self_eval_options, self.user_stats)
             case other:
                 raise RuntimeError(f"ggp_register: no stats screen for mode {other!r}")
 
 
     #############################################
-    # Database writes
+    # Writes
     #############################################
 
     def _div_team_name(self, div_team_id: int) -> str:
@@ -325,47 +336,64 @@ class RegSession:
 
 
     async def _commit_add(self, interaction: discord.Interaction) -> None:
+        """ Store the questionnaire, then register, then re-read.
+
+            The questionnaire goes first because it stands on its own: it is an
+            answer about the player, not about this registration, and a group
+            that fills a moment later does not make it wrong.
+
+            There is no capacity check here. The API counts inside the write and
+            answers 409 when the group is full, which is the only answer that
+            cannot already be stale by the time it is read.
+        """
         await self._ack(interaction)
 
-        if await divteam_is_full(self.div_team_str, self.new_div_team_id):
-            # The screen the user chose from was built when the session
-            # opened, so a capped division can fill between choosing it and
-            # confirming. This is the only count read at the moment of the
-            # write; nothing downstream reads one.
+        if self.user_stats is not None:
+            saved = await self.user_stats.save_to_api(
+                self.api, interaction.user.id, interaction.user.name,
+                default_display_name(interaction.user))
+            if saved:
+                logger.info("User stats of %s for %s have been saved.",
+                            interaction.user.name, self.selected_event.event_name)
+
+        try:
+            await self.api.register(
+                interaction.user.id,
+                interaction.user.name,
+                default_display_name(interaction.user),
+                self.selected_event.scheduled_event_id,
+                self.new_div_team_id,
+                datetime.now(timezone.utc),
+            )
+        except FzdApiError as error:
+            if error.status != 409:
+                raise
             self.notice = (f"**{self._div_team_name(self.new_div_team_id)}** filled up while you "
                            f"were choosing, so nothing was registered. "
                            f"Pick another {self.div_team_str}.")
             logger.info("%s not added to %s: %s %s is full", interaction.user.name,
                         self.selected_event.event_name, self.div_team_str, self.new_div_team_id)
-            self.events = await EventRegister.get_event_information()
+            await self._read_registrations()
             return
 
-        await registration_update_db(db_user_id=self.user.db_id,
-                                     scheduled_event_id=self.selected_event.scheduled_event_id,
-                                     div_team_str=self.div_team_str,
-                                     add_div_team_id=self.new_div_team_id,
-                                     rm_div_team_id=self.div_team_id)
         logger.info("%s added to %s, %s %s", interaction.user.name,
                     self.selected_event.event_name, self.div_team_str, self.new_div_team_id)
-
-        if self.user_stats is not None:
-            await self.user_stats.save_user_stats()
-            logger.info("User stats of %s for %s have been saved to the database.",
-                        interaction.user.name, self.selected_event.event_name)
-
-        self.user = await EventRegister.get_user_reg_information(interaction)
+        await self._read_registrations()
 
 
     async def _commit_withdraw(self, interaction: discord.Interaction) -> None:
+        """ Leave the group. The API removes whichever group of this event the
+            player holds, so there is nothing to name and nothing to look up.
+        """
         await self._ack(interaction)
-        await registration_update_db(db_user_id=self.user.db_id,
-                                     scheduled_event_id=self.selected_event.scheduled_event_id,
-                                     div_team_str=self.div_team_str,
-                                     rm_div_team_id=self.div_team_id)
+        await self.api.withdraw(
+            interaction.user.id,
+            self.selected_event.scheduled_event_id,
+            datetime.now(timezone.utc),
+        )
         logger.info("%s removed from %s, %s %s", interaction.user.name,
                     self.selected_event.event_name, self.div_team_str, self.div_team_id)
-
-        self.user = await EventRegister.get_user_reg_information(interaction)
+        await self._read_registrations()
 
 
     #############################################
@@ -422,40 +450,8 @@ class RegSession:
 #############################################
 
 class EventRegister(commands.Cog):
-    def __init__(self, bot: commands.Bot, event_list: list[str]) -> None:
+    def __init__(self, bot: commands.Bot) -> None:
         self.bot: commands.Bot = bot
-        self.event_list: list[str] | None = event_list
-
-    #############################################
-    # Functions for loading tasks
-    #############################################
-
-    @staticmethod
-    async def get_event_information() -> list[Event]:
-        """
-        """
-        events: list[Event] = []
-
-        async with get_db_connection() as db:
-            reg_event_dict_list = await get_registration_events(db)
-            event_id_list = [event['scheduled_event_id'] for event in reg_event_dict_list if 'scheduled_event_id' in event]
-
-        async with asyncio.TaskGroup() as eg:
-            tasks = [eg.create_task(
-                Event.load_event_from_database(scheduled_event_id=event_id)) for event_id in event_id_list]
-        events = [task.result() for task in tasks]
-
-        return events
-
-
-    @staticmethod
-    async def get_user_reg_information(interaction: discord.Interaction) -> UserRegistrations:
-        """
-        """
-        user = UserRegistrations(interaction)
-        await user.get_user_info(interaction)
-        return user
-
 
     """ Commands """
     @app_commands.command(
@@ -486,6 +482,4 @@ class EventRegister(commands.Cog):
 async def setup(bot: commands.Bot):
     server_id = get_settings().server_id
     GUILD_ID = discord.Object(id=server_id)
-    # Get initial event list. To be refreshed upon /event_create_update calls
-    event_list = await refresh_event_list()
-    await bot.add_cog(EventRegister(bot, event_list), guild=GUILD_ID)
+    await bot.add_cog(EventRegister(bot), guild=GUILD_ID)

@@ -1,29 +1,50 @@
 from typing import Literal, Self
-from datetime import datetime
+from datetime import datetime, timezone
 import asyncio
 import discord
 from fzdbot.utils.view_utils import DivTeam, discord_timestamp
-from fzdbot.utils.db_utils import get_or_create_db_user
 from fzdbot.fzd_db import (
     get_db_connection,
     get_registration_events,
     get_event_description,
     get_registration_period,
-    get_divteam_capacity,
     get_event_divisions,
     get_event_teams,
     get_machine_config_db,
     get_race_config_db,
-    get_user_registrations,
     create_update_event,
     create_update_scheduled_event,
     create_update_divteam,
     create_update_registration_period,
-    save_user_stats,
-    get_user_stats,
     update_event_machines,
     update_event_race_options
 )
+
+
+def instant_to_naive_utc(value: str | None) -> datetime | None:
+    """ An API instant as the naive UTC datetime this module compares against.
+
+        `datetime.now()` and `datetime.timestamp()` both read a naive value as
+        local time, and every datetime here is compared or formatted by one of
+        them, so the offset is dropped rather than carried. Carrying it would
+        make `reg_open > datetime.now()` raise instead of answer.
+    """
+    if value is None:
+        return None
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return parsed.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def option_id(options: list[dict], text: str | None) -> int | None:
+    """ The id of the option carrying `text`, or None.
+
+        The API answers a stored questionnaire answer as text and offers the
+        options it came from; the dropdowns work in ids. An answer whose text is
+        no longer in its list gives None, and the screen asks again.
+    """
+    if text is None:
+        return None
+    return next((option["id"] for option in options if option["text"] == text), None)
 
 
 def is_full(capacity: int | None, num_registered: int) -> bool:
@@ -33,20 +54,6 @@ def is_full(capacity: int | None, num_registered: int) -> bool:
         to reach, so it is never full.
     """
     return capacity is not None and num_registered >= capacity
-
-
-async def divteam_is_full(div_team_str: DivTeam, div_team_id: int) -> bool:
-    """ The same question, answered from the database at the moment it is asked.
-
-        The Event behind a screen is a snapshot taken when the session opened.
-        This is not, which is what makes it worth asking twice.
-    """
-    div_team = "divisions" if div_team_str == DivTeam.DIVISION else "teams"
-    async with get_db_connection() as db:
-        row = await get_divteam_capacity(db, div_team, div_team_id)
-    if row is None:
-        return False
-    return is_full(row["capacity"], row["num_registered"])
 
 
 class Event():
@@ -300,6 +307,38 @@ class Event():
         else:
             teams = None
         return teams
+
+
+    @staticmethod
+    def from_api(event: dict) -> "Event":
+        """ One event object from `GET /v1/players/{id}/registrations`.
+
+            The whole screen in one payload: the event, its groups, and each
+            group's capacity and headcount. An event runs on divisions or on
+            teams, so the other list stays empty and `div_or_team` reads which
+            from that.
+        """
+        self = Event()
+        self.scheduled_event_id = event["scheduled_event_id"]
+        self.event_name = event["display_name"] or event["event"]
+        self.description = event["description"]
+        self.mode = event["mode"]
+        self.scoring = event["scoring_method"]
+        self.machine_required = event["machine_input_required"]
+        self.start_time = instant_to_naive_utc(event["starts_at"])
+        self.end_time = instant_to_naive_utc(event["ends_at"])
+        self.reg_open = instant_to_naive_utc(event["registration_opens_at"])
+        self.reg_close = instant_to_naive_utc(event["registration_closes_at"])
+
+        groups = [
+            _group_from_api(group, event["group_kind"], event["scheduled_event_id"])
+            for group in event["groups"]
+        ]
+        if event["group_kind"] == "team":
+            self.teams, self.divisions = groups, []
+        else:
+            self.divisions, self.teams = groups, []
+        return self
 
 
     @classmethod
@@ -702,10 +741,22 @@ def group_list(group: list[Division] | list[Team]):
         return string
 
 
+def _group_from_api(group: dict, kind: str | None, scheduled_event_id: int) -> "Division | Team":
+    """ One division or team, with the headcount the API counted."""
+    div_team = Team() if kind == "team" else Division()
+    div_team.id = group["group_id"]
+    div_team.scheduled_event_id = scheduled_event_id
+    div_team.name = group["name"]
+    div_team.alt_name = group["alt_name"]
+    div_team.emote = group["emote"]
+    div_team.capacity = group["capacity"]
+    div_team.num_registered = group["registered"]
+    return div_team
+
+
 class UserRegistrations():
     def __init__(self, interaction: discord.Interaction):
         self.discord_user_id: str = interaction.user.name
-        self.db_id: int | None = None
         self.registrations: list[dict] | None = None
         """ self.registrations dictionary format:
                 {scheduled_event_id: int,
@@ -723,7 +774,6 @@ class UserRegistrations():
                     else:
                         out_string = "UserRegistrations(\n"
                         out_string += f"\tdiscord_user_id: {self.discord_user_id}\n"
-                        out_string += f"\tdb_id: {self.db_id}\n"
                         out_string += "\tregistrations:\n"
                         if not self.registrations:
                             out_string += "\t\tNone\n"
@@ -746,12 +796,26 @@ class UserRegistrations():
             return False
         
 
-    async def get_user_info(self, interaction: discord.Interaction):
-        if not self.discord_user_id:
-            self.discord_user_id = interaction.user.name
-        async with get_db_connection() as db:
-            self.db_id = await get_or_create_db_user(db, interaction.user)
-            self.registrations = await get_user_registrations(db, self.db_id)
+    @staticmethod
+    def from_api(interaction: discord.Interaction, events: list[dict]) -> "UserRegistrations":
+        """ Where this player stands, read off the same payload the events came
+            from.
+
+            The API answers one event object per open event, each carrying this
+            player's registration or null, so there is no second call and no
+            user id to carry: the snowflake in the path is the whole identity.
+        """
+        self = UserRegistrations(interaction)
+        self.registrations = [
+            {
+                "scheduled_event_id": event["scheduled_event_id"],
+                "type": event["group_kind"],
+                "div_team_id": event["your_registration"]["group_id"],
+            }
+            for event in events
+            if event["your_registration"] is not None
+        ]
+        return self
 
 
 class UserStats():
@@ -762,30 +826,47 @@ class UserStats():
 
 
     @staticmethod
-    async def load_user_stats(user_id, scheduled_event_id) -> Self:
-        """ Loads stats of scheduled_event_id. If scheduled_event_id is None
-            or no stats for scheduled_event_id, get most recent stats if exist.
+    async def load_from_api(api, discord_user_id: int,
+                            scheduled_event_id: int) -> tuple[Self, list[dict], list[dict]]:
+        """ This player's answers for one event, and the two lists a form offers.
+
+            An answer the player gave for some other event arrives filled in
+            here, exactly as the database read it filled it in, and counts as
+            complete — which is what decides whether the screen appears at all.
+            `answered_for_this_event` is what tells the two apart and is
+            deliberately not consulted.
+
+            Returns the stats and the two option lists, because the API answers
+            all three in one call and the screen needs all three.
         """
-        async with get_db_connection() as db:
-            user_stats_dict = await get_user_stats(db, user_id, scheduled_event_id)
+        body = await api.evaluations(discord_user_id, scheduled_event_id)
+        self_eval_options = body["options"]["self_evaluation"]
+        recent_options = body["options"]["most_recent_event"]
 
         self = UserStats()
-        self.user_id = user_id
         self.scheduled_event_id = scheduled_event_id
-        if user_stats_dict:
-            if user_stats_dict["self_eval_id"]:
-                self.self_eval_id = user_stats_dict["self_eval_id"]
-            if user_stats_dict["most_recent_id"]:
-                self.most_recent_id = user_stats_dict["most_recent_id"]
+        self.self_eval_id = option_id(self_eval_options, body["self_evaluation"])
+        self.most_recent_id = option_id(recent_options, body["most_recent_event"])
+        return self, recent_options, self_eval_options
 
-        return self
-        
 
-    async def save_user_stats(self):
-        """ Save UserStats object to database.
+    async def save_to_api(self, api, discord_user_id: int,
+                          discord_user_name: str, tag: str) -> bool:
+        """ Store both answers against this event. False when there was nothing
+            complete to store: the write takes both answers, and the screen's
+            Continue button is disabled until both are chosen.
         """
-        async with get_db_connection() as db:
-            await save_user_stats(db, self)
+        if not (self.self_eval_id and self.most_recent_id):
+            return False
+        await api.save_evaluations(
+            discord_user_id,
+            discord_user_name,
+            tag,
+            self.scheduled_event_id,
+            self.self_eval_id,
+            self.most_recent_id,
+        )
+        return True
 
 
 # Dummy event for testing

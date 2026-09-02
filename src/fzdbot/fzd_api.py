@@ -10,6 +10,12 @@ logger = logging.getLogger(__name__)
 API_KEY_HEADER = "X-API-Key"
 
 
+def _instant(moment: datetime) -> str:
+    """A `?now=` value. The API reads its domain clock from this parameter, so a
+    naive datetime here would be sent as a wall clock in an unstated zone."""
+    return moment.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
 class FzdApiError(Exception):
     def __init__(self, message: str, status: int | None = None) -> None:
         super().__init__(message)
@@ -86,11 +92,80 @@ class FzdApi:
         )
 
     async def latest_event(self, event_type: str | None, now: datetime) -> dict[str, Any]:
-        now_utc = now.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        now_utc = _instant(now)
         path = f"/v1/events/latest?now={now_utc}"
         if event_type is not None:
             path = f"/v1/events/latest?event_type={event_type}&now={now_utc}"
         return await self._request("GET", path)
+
+    async def registrations(self, discord_user_id: int, now: datetime) -> list[dict[str, Any]]:
+        """Every event open to registration, each with its groups and this
+        player's standing in it. One call: the groups carry their own capacity
+        and headcount, so nothing downstream counts anything."""
+        body = await self._request(
+            "GET",
+            f"/v1/players/{discord_user_id}/registrations?now={_instant(now)}",
+        )
+        return body["events"]
+
+    async def register(
+        self,
+        discord_user_id: int,
+        discord_user_name: str,
+        tag: str,
+        scheduled_event_id: int,
+        group_id: int,
+        now: datetime,
+    ) -> dict[str, Any]:
+        """Join `group_id`, or move to it from another group of the same event.
+        409 means the group filled up; the caller re-reads and says so."""
+        return await self._request(
+            "PUT",
+            f"/v1/players/{discord_user_id}/registrations/{scheduled_event_id}?now={_instant(now)}",
+            json={
+                "discord_user_name": discord_user_name,
+                "tag": tag,
+                "group_id": group_id,
+            },
+        )
+
+    async def withdraw(
+        self, discord_user_id: int, scheduled_event_id: int, now: datetime
+    ) -> dict[str, Any]:
+        """Leave whichever group of this event the player holds. Idempotent."""
+        return await self._request(
+            "DELETE",
+            f"/v1/players/{discord_user_id}/registrations/{scheduled_event_id}?now={_instant(now)}",
+        )
+
+    async def evaluations(self, discord_user_id: int, scheduled_event_id: int) -> dict[str, Any]:
+        """This player's questionnaire answers for one event, plus the two answer
+        lists a form offers. `answered_for_this_event` tells a stored answer from
+        one carried over from the player's most recent event."""
+        return await self._request(
+            "GET",
+            f"/v1/ggp8/players/{discord_user_id}/evaluations/{scheduled_event_id}",
+        )
+
+    async def save_evaluations(
+        self,
+        discord_user_id: int,
+        discord_user_name: str,
+        tag: str,
+        scheduled_event_id: int,
+        self_evaluation_id: int,
+        most_recent_event_id: int,
+    ) -> dict[str, Any]:
+        return await self._request(
+            "PUT",
+            f"/v1/ggp8/players/{discord_user_id}/evaluations/{scheduled_event_id}",
+            json={
+                "discord_user_name": discord_user_name,
+                "tag": tag,
+                "self_evaluation_id": self_evaluation_id,
+                "most_recent_event_id": most_recent_event_id,
+            },
+        )
 
     async def _request(self, method: str, path: str, json: dict[str, Any] | None = None) -> Any:
         if self._session is None or self._session.closed:

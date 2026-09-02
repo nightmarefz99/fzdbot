@@ -594,7 +594,7 @@ class BasicStatsView(SessionView):
 
             options = []
             for recent_dict in recent_dict_list:
-                options.append(discord.SelectOption(label=recent_dict["most_recent"], 
+                options.append(discord.SelectOption(label=recent_dict["text"], 
                                         description=None,
                                         default=(self.parent_view.user_stats.most_recent_id == recent_dict["id"]),
                                         value=recent_dict["id"]
@@ -619,7 +619,7 @@ class BasicStatsView(SessionView):
     
                 options = []
                 for self_eval_dict in self_eval_dict_list:
-                    options.append(discord.SelectOption(label=self_eval_dict["self_eval"], 
+                    options.append(discord.SelectOption(label=self_eval_dict["text"], 
                                             description=None,
                                             default=(self.parent_view.user_stats.self_eval_id == self_eval_dict["id"]),
                                             value=self_eval_dict["id"]
