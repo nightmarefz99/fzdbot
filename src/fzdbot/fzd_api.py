@@ -78,6 +78,12 @@ class FzdApi:
     async def active_events(self) -> list[dict[str, Any]]:
         return await self._request("GET", "/v1/events/active")
 
+    async def scoreboard(self, scheduled_event_id: int, discord_user_id: int) -> dict[str, Any]:
+        return await self._request(
+            "GET",
+            f"/v1/events/{scheduled_event_id}/scoreboard?discord_user_id={discord_user_id}",
+        )
+
     async def _request(self, method: str, path: str, json: dict[str, Any] | None = None) -> Any:
         if self._session is None or self._session.closed:
             self._session = aiohttp.ClientSession(timeout=self._timeout)

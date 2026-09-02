@@ -55,6 +55,7 @@ def test_player_request_shapes_and_snowflakes_are_strings():
             Response(200, {"scores": []}),
             Response(200, {}),
             Response(204, {}),
+            Response(200, {"scheduled_event_id": 14, "division": None, "entries": []}),
         )
 
         await client.set_tag(123456789012345678, "pilot", "Pilot")
@@ -62,6 +63,7 @@ def test_player_request_shapes_and_snowflakes_are_strings():
         await client.list_scores(123456789012345678, 14)
         await client.edit_score(123456789012345678, 8, 100)
         await client.delete_score(123456789012345678, 8)
+        await client.scoreboard(14, 123456789012345678)
 
         assert session.calls == [
             (
@@ -97,6 +99,12 @@ def test_player_request_shapes_and_snowflakes_are_strings():
             (
                 "DELETE",
                 "https://api.example.test/v1/players/123456789012345678/scores/8",
+                None,
+                {API_KEY_HEADER: "test-key"},
+            ),
+            (
+                "GET",
+                "https://api.example.test/v1/events/14/scoreboard?discord_user_id=123456789012345678",
                 None,
                 {API_KEY_HEADER: "test-key"},
             ),
