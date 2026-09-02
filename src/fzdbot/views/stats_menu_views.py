@@ -4,7 +4,6 @@ from fzdbot.utils.event_class import UserStats
 from fzdbot.utils.view_utils import NextStep
 from fzdbot.utils.status_policies import user_event_status
 from fzdbot.views.common import GenericButton, SessionView
-from fzdbot.fzd_db import get_db_connection
 
 #####################################
 # Modal classes

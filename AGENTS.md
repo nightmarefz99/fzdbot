@@ -4,6 +4,7 @@
 
 - **All code**: `fzdbot/` - Where all the code lives
 - **Application**: `fzdbot/bot.py` — main()
+- **API client**: `fzdbot/fzd_api.py` — how this bot reaches FZD's data
 
 **This repo has no tests.**
 
@@ -31,6 +32,46 @@ Rules of thumb:
 ## Tests
 
 There are currently no tests, and you will not make any, unless explicitly make them by the user.
+
+## Where the data comes from
+
+**Nine of the ten commands read and write through the FZD API, not the database.**
+`fzd_api.py` is the whole client: one `aiohttp` session, an `X-API-Key` header,
+and `FzdApiError` carrying the HTTP status. `bot.api` holds it, so a cog reaches
+it as `self.bot.api` and a registration session as `interaction.client.api`.
+
+`FZD_API_BASE_URL` and `FZD_API_KEY` are **required at startup**. There is no
+fallback to the database: a missing key stops the bot rather than letting nine
+commands fail one at a time. One key per environment, minted by the API's
+`api-key-new`.
+
+**A player is named by their Discord id.** Every API path takes the snowflake,
+and `users.id` appears nowhere in this repo — nothing here resolves an account,
+and nothing here holds a database user id. Where a row may have to be created,
+the request also carries `discord_user_name` and a `tag`
+(`utils/user_utils.default_display_name`, `display_name` truncated to 10).
+
+**`fzd_db.py` remains, and only for `/fzd_start_event` and
+`/fzd_events_schedule`** — plus `get_event_types`, which those two share with
+`/fzd_show`'s event-type autocomplete. It holds the pool, `execute_query`, and
+those four queries; no SQL in this repo names `users`,
+`event_result_points`, `user_divisions`, `user_teams`,
+`event_registration_log`, `user_stats`, `divisions` or `teams`.
+
+**The API answers a composite read once.** `/ggp_register` asks
+`GET /v1/players/{id}/registrations` and gets the open events, every group's
+capacity and headcount, and the caller's own registration in one payload;
+`Event.from_api` and `UserRegistrations.from_api` build the screen objects from
+it. Nothing in this repo counts a registration or checks a capacity: the API
+counts inside the write and answers 409, which is the only answer that cannot
+already be stale by the time it is read.
+
+**Instants from the API are stored naive UTC.** `datetime.now()` and
+`datetime.timestamp()` both read a naive datetime as local time, and
+`utils/status_policies.py` compares against the first while `discord_timestamp`
+calls the second, so `utils/event_class.instant_to_naive_utc` drops the offset
+rather than carrying it. Carrying it would make `reg_open > datetime.now()`
+raise instead of answer.
 
 ## Comments and comment structure
 
