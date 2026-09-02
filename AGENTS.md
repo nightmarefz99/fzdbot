@@ -73,6 +73,55 @@ calls the second, so `utils/event_class.instant_to_naive_utc` drops the offset
 rather than carrying it. Carrying it would make `reg_open > datetime.now()`
 raise instead of answer.
 
+## Running against stage
+
+**There is one bot token, so there is one bot.** Two processes on the same token
+both receive every interaction, so a second instance run alongside the live one
+double-handles real commands -- one write to whatever that instance points at,
+one to the other. Scoping `SERVER_ID` to another guild does not fix it: command
+*registration* is per guild, interaction *delivery* is per application.
+
+So testing against stage means the live bot is stopped for the duration. The
+sequence, on the VPS:
+
+```bash
+sudo systemctl stop fzdbot                      # one token, one bot
+sudo -u fzdbot git -C /opt/fzdbot/app fetch --all
+sudo -u fzdbot git -C /opt/fzdbot/app checkout feat/port-to-api
+sudo -u fzdbot bash -c 'cd /opt/fzdbot/app && ~/.local/bin/uv sync --frozen'
+```
+
+Point it at stage without editing the deployment's env files -- pass the
+overrides on the command line, so nothing has to be put back afterwards:
+
+```bash
+sudo -u fzdbot bash -c 'cd /opt/fzdbot/app
+  set -a; . /opt/fzdbot/.env; . ./.env; set +a
+  export SERVER_ID=1396913981649719456        # Nightmare'"'"'s Nether, not FZD
+  export DB_NAME=fzd_stage
+  export FZD_API_BASE_URL=https://api-stage.fzd.gg
+  export FZD_API_KEY=$(sudo cat /etc/fzd-api/issued/stage-fzdbot.key)
+  ~/.local/bin/uv run --no-sync fzdbot'
+```
+
+`FZD_API_BASE_URL` and `FZD_API_KEY` are **required and have no defaults**, so a
+run that forgets them stops at startup rather than failing nine commands one at
+a time. `DB_NAME` moves too: `/fzd_start_event` and `/fzd_events_schedule` still
+use the pool, and pointing the API at stage while the pool wrote to prod would
+split one command's effects across two schemas.
+
+Going back is a checkout and a restart; nothing above wrote to a file:
+
+```bash
+sudo -u fzdbot git -C /opt/fzdbot/app checkout refactor/ggp8-register-session
+sudo systemctl start fzdbot
+```
+
+**Deploying the port for real** needs two lines added instead:
+`FZD_API_BASE_URL` in `/opt/fzdbot/app/.env` (not a secret) and `FZD_API_KEY` in
+`/opt/fzdbot/.env` (mode 600, the service user's own file, where the token
+already is).
+
 ## Comments and comment structure
 
 Code should be self-documenting, to the best extent possible. Comments should be
