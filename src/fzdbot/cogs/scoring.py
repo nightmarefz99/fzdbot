@@ -2,6 +2,7 @@
 #         /add_score, /edit_score, /delete_score
 
 import logging
+from datetime import datetime, timedelta, timezone
 
 import discord
 from discord import app_commands
@@ -20,6 +21,8 @@ class Scoring(commands.Cog):
     def __init__(self, bot: commands.Bot, machine_dict: list[dict[str, str]]):
         self.bot = bot
         self.machine_dict = machine_dict
+        self._active_event_at: datetime | None = None
+        self._active_event: dict | None = None
 
     @classmethod
     async def grab_machines(cls, bot: commands.Bot) -> list[dict[str, str]]:
@@ -29,13 +32,22 @@ class Scoring(commands.Cog):
     @staticmethod
     async def respond(interaction: discord.Interaction, content: str, *, ephemeral: bool = False) -> None:
         if interaction.response.is_done():
-            await interaction.followup.send(content, ephemeral=ephemeral)
+            if ephemeral:
+                await interaction.edit_original_response(content=content)
+            else:
+                await interaction.followup.send(content, ephemeral=False)
         else:
             await interaction.response.send_message(content, ephemeral=ephemeral)
 
     async def active_event(self) -> dict | None:
+        now = datetime.now(timezone.utc)
+        if self._active_event_at is not None and now - self._active_event_at < timedelta(seconds=10):
+            return self._active_event
+
         events = await self.bot.api.active_events()
-        return events[0] if events else None
+        self._active_event_at = now
+        self._active_event = events[0] if events else None
+        return self._active_event
 
     # =============================================================================================================
     #   /add_score

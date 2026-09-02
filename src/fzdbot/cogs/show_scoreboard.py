@@ -47,8 +47,12 @@ class Scoreboard(commands.Cog):
         logger.debug("[showScoreboard] Invoked by %s with event_type=%s", interaction.user, event_type)
         try:
             await interaction.response.defer()
-            active_events = await self.bot.api.active_events()
-            eventinfo = active_events[0] if active_events else None
+            try:
+                eventinfo = await self.bot.api.latest_event(event_type, datetime.now(timezone.utc))
+            except FzdApiError as error:
+                if error.status != 404:
+                    raise
+                eventinfo = None
 
             if not eventinfo:
                 if event_type:

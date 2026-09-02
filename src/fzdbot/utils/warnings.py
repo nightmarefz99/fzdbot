@@ -10,7 +10,7 @@ class InputWarnings:
     @staticmethod
     async def respond(interaction: discord.Interaction, content: str) -> None:
         if interaction.response.is_done():
-            await interaction.followup.send(content, ephemeral=True)
+            await interaction.edit_original_response(content=content)
         else:
             await interaction.response.send_message(content, ephemeral=True)
 

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from datetime import datetime, timezone
 from typing import Any
 
 import aiohttp
@@ -83,6 +84,13 @@ class FzdApi:
             "GET",
             f"/v1/events/{scheduled_event_id}/scoreboard?discord_user_id={discord_user_id}",
         )
+
+    async def latest_event(self, event_type: str | None, now: datetime) -> dict[str, Any]:
+        now_utc = now.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        path = f"/v1/events/latest?now={now_utc}"
+        if event_type is not None:
+            path = f"/v1/events/latest?event_type={event_type}&now={now_utc}"
+        return await self._request("GET", path)
 
     async def _request(self, method: str, path: str, json: dict[str, Any] | None = None) -> Any:
         if self._session is None or self._session.closed:
