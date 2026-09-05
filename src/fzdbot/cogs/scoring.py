@@ -158,10 +158,9 @@ class Scoring(commands.Cog):
 
         if self._OPTIONS_CACHE["machine_option_list"] is not None and clock - self._OPTIONS_CACHE["last_updated"] < self._ACTIVE_TTL_SECONDS:
             # Use existing cache values
-            options = self._OPTIONS_CACHE["machine_option_list"]
             # Assume no need to check whether the event is active, given the short
             #   cache window.
-            return [app_commands.Choice(name=option["name"], value=option["value"]) for option in options[:4]]
+            ...
         else:
             active_event, user_id = await self.get_event_config_from_db(interaction.user.name)
             if not active_event:
@@ -182,25 +181,24 @@ class Scoring(commands.Cog):
 
         if self._OPTIONS_CACHE["lineup_option_list"] is not None and clock - self._OPTIONS_CACHE["last_updated"] < self._ACTIVE_TTL_SECONDS:
             # Use existing cache values
-            options = self._OPTIONS_CACHE["lineup_option_list"]
             # Assume no need to check whether the event is active, given the short
             #   cache window.
-            return [app_commands.Choice(name=option["name"], value=option["value"]) for option in options[:25]]
+            ...
         else:
             # Refresh lineup information from database and get info to confirm
             #   that there is an active event and user is in the database.
             active_event, user_id = await self.get_event_config_from_db(interaction.user.name)
-
             if not active_event:
                 return [app_commands.Choice(name="No active event", value=str(-1))]
             if not user_id:
                 return [app_commands.Choice(name="No user id. Use command `/fzd_set_name` to add yourself.", value=str(-2))]
-            if not self._OPTIONS_CACHE["lineup_option_list"]:
-                return [app_commands.Choice(name="No lineups are available for this event.", value=str(-3))]
+        
+        if not self._OPTIONS_CACHE["lineup_option_list"]:
+            return [app_commands.Choice(name="No lineups are available for this event.", value=str(-3))]
                     
-            options = [opt for opt in self._OPTIONS_CACHE["lineup_option_list"] if current.casefold() in opt["name"].casefold()]
-            # Note discord limit is 25 options; only first 25 options provided if exceeded.
-            return [app_commands.Choice(name=option["name"], value=str(option["value"])) for option in options[:25]]
+        options = [opt for opt in self._OPTIONS_CACHE["lineup_option_list"] if current.casefold() in opt["name"].casefold()]
+        # Note discord limit is 25 options; only first 25 options provided if exceeded.
+        return [app_commands.Choice(name=option["name"], value=str(option["value"])) for option in options[:25]]
             
 
     # ==========================================================================================
