@@ -165,7 +165,11 @@ async def create_event(db, event, duration: int = 2) -> None:
 
 async def check_for_active_event(db, hours_from_now: int = 0):
     """Checks database event times start and end times to see if
-    event is active right now, returns dict with name and id
+        event is active right now, returns dict with the following:
+        - id
+        - name
+        - scoring_method
+        - is_machine_input_required
     """
     active_event = {"name": "NULL", "id": 0, "is_machine_input_required": False}  # Assume no match
     sql_getevent = """SELECT es.id, e.name, es.utc_start_dt, es.utc_end_dt, es.scoring_method, es.is_machine_input_required
@@ -242,16 +246,10 @@ async def submit_score_sql(db, dataentry) -> int:
                         LEFT JOIN event_lineups ON event_lineups.id = %s
                         WHERE es.id = %s
                     """
-    print(f"scheduled_event_id: {dataentry[1]}")
-    print(f"lineup_id: {dataentry[5]}")
-    print(f"user_id: {dataentry[0]}")
-    print(f"score: {dataentry[2]}")
-    print(f"machine_id: {dataentry[4]}")
     params = (dataentry[1], dataentry[5], dataentry[0],
               dataentry[2], dataentry[2], dataentry[1],
               dataentry[0], dataentry[1], dataentry[0],
               dataentry[4], dataentry[5], dataentry[1],)
-    print("made it here")
     await execute_query(db, sql_new_row, params=params, fetch=None, isProc=False)
     return dataentry[2]
 
@@ -424,6 +422,18 @@ async def get_registration_period(db, scheduled_event_id: int) -> dict | None:
                     """
     params = (scheduled_event_id,)
     reginfo = await execute_query(db, sql_get_regperiod, params=params, fetch="one", isProc=False)
+    if not reginfo:
+        reginfo = {}
+        reginfo.setdefault("reg_period_id")
+        reginfo.setdefault("reg_open")
+        reginfo.setdefault("reg_close")
+    else:
+        if not reginfo["reg_period_id"]:
+            reginfo.setdefault("reg_period_id", None)
+        if not reginfo["reg_open"]:
+            reginfo.setdefault("reg_open", None)
+        if not reginfo["reg_close"]:
+            reginfo.setdefault("reg_close", None)
     return reginfo
 
 
@@ -1043,6 +1053,48 @@ async def get_public_prix_options(db) -> dict:
     return prix_dict
 
 
+async def get_prix_options(db, public: Literal["public","private","all"]) -> dict:
+    """ Output dictionary format:
+        - id (int)
+        - name (str)
+        - mode (str)
+        - tickets (int)
+    """
+    private_list = "'99', 'Pro', 'TB', 'cMP', 'MP'"
+    public_list = "'99', 'Pro', 'TB', 'cMP', 'MP', 'WT', 'mWT'"
+    all_list = public_list
+
+    match public:
+        case "public":
+            game_modes_string = public_list
+        case "private":
+            game_modes_string = private_list
+        case "all":
+            game_modes_string = all_list
+
+    sql_get_private_prix = f""" SELECT
+                                    g.id AS db_id,
+                                    g.name AS name,
+                                    g.mode AS mode,
+                                    gp.tickets AS tickets
+                                FROM grand_prix g
+                                CROSS JOIN game_modes gp ON gp.short_name = 'GP'
+
+                                UNION ALL
+
+                                SELECT 
+                                    m.id AS db_id,
+                                    m.name AS name,
+                                    m.mode AS mode,
+                                    m.tickets AS tickets
+                                FROM game_modes m
+                                WHERE m.short_name IN {game_modes_string};
+                            """
+    prix_dict = await execute_query(db, sql_get_private_prix, params=None, fetch="all", isProc=False)
+
+    return prix_dict
+
+
 async def get_race_config_db(db, scheduled_event_id):
     """
     """
@@ -1072,34 +1124,29 @@ async def get_race_config_db(db, scheduled_event_id):
     return race_dict
 
 
-async def update_event_machines(db, 
-        config_id: int, scheduled_event_id: int, machine_json: str) -> int:
+async def update_event_machines(db, scheduled_event_id: int, machine_json: str) -> int:
     """ On Duplicate SQL needed to preserve existing primary key and not auto-increment it
     """
     sql_update_machines = """INSERT INTO events_scheduled_config
-                            (id, scheduled_event_id, machine_options)
-                            VALUES (%s, %s, %s)
+                            (scheduled_event_id, machine_options)
+                            VALUES (%s, %s)
                             ON DUPLICATE KEY UPDATE 
                             machine_options = %s;
                         """
-    params = (config_id, scheduled_event_id, machine_json, machine_json,)
+    params = (scheduled_event_id, machine_json, machine_json,)
     await execute_query(db, sql_update_machines, params=params, fetch=None, isProc=False)
 
-    sql_fetch_id = "SELECT LAST_INSERT_ID() AS id"
-    config_db_id = await execute_query(db, sql_fetch_id, params=None, fetch="one", isProc=False)
 
-    return config_db_id
-
-
-async def get_machine_config_db(db, scheduled_event_id: int) -> tuple[int, dict]:
+async def get_machine_config_db(db, scheduled_event_id: int) -> dict | None:
     """ Get config_id and json string of machine data from database.
     """
-    sql_get_config_id = """ SELECT id AS config_id
-                            FROM events_scheduled_config
-                            WHERE scheduled_event_id = %s
-                        """
-    params = (scheduled_event_id,)
-    config_dict = await execute_query(db, sql_get_config_id, params=params, fetch="one", isProc=False)
+    # Primary key unneeded as searching everything via scheduled_event_id
+    # sql_get_config_id = """ SELECT id AS config_id
+    #                         FROM events_scheduled_config
+    #                         WHERE scheduled_event_id = %s
+    #                     """
+    # params = (scheduled_event_id,)
+    # config_dict = await execute_query(db, sql_get_config_id, params=params, fetch="one", isProc=False)
 
     sql_grab_machines = """ SELECT DISTINCT
                                 m.id,
@@ -1119,13 +1166,13 @@ async def get_machine_config_db(db, scheduled_event_id: int) -> tuple[int, dict]
     params = (scheduled_event_id,)
     m_dict = await execute_query(db, sql_grab_machines, params=params, fetch="all", isProc=False)
 
-    if config_dict:
-        return config_dict["config_id"], m_dict
+    if not m_dict:
+        return None
     else:
-        return None, m_dict
+        return m_dict
 
 
-async def get_event_lineus_and_scores(db, scheduled_event_id: int, user_id: int) -> list[dict]:
+async def get_event_lineups_and_scores(db, scheduled_event_id: int, user_id: int) -> list[dict]:
     """
     """
     sql_lineup_and_score =  """ SELECT el.id AS event_lineup_id,
@@ -1147,3 +1194,39 @@ async def get_event_lineus_and_scores(db, scheduled_event_id: int, user_id: int)
         return lineup_score_dict
     else:
         return None
+
+async def get_event_config_flags(db, scheduled_event_id: int) -> dict:
+    """ Get the simple components of an event config.
+    """
+    sql_get_config =    """ SELECT is_machine_input_required AS is_machine_input_required,
+                                is_lineup_input_required AS is_lineup_input_required,
+                                is_registration_event AS is_registration_event
+                            FROM events_scheduled_config
+                            WHERE scheduled_event_id = %s 
+                        """
+    params = (scheduled_event_id,)
+    flag_dict = await execute_query(db, sql_get_config, params=params, fetch="all", isProc=False)
+
+    if not flag_dict:
+        return None
+    else:
+        # Transform is_machine_input_required from bit to bool
+        raw_machine_flag = flag_dict.get("is_machine_input_required")
+        if isinstance(raw_machine_flag, (bytes, bytearray)):
+            flag_dict["is_machine_input_required"] = int.from_bytes(raw_machine_flag, byteorder="big") == 1
+        else:
+            flag_dict["is_machine_input_required"] = bool(raw_machine_flag)
+        
+        # Transform is_lineup_input_required from bit to bool
+        raw_machine_flag = flag_dict.get("is_lineup_input_required")
+        if isinstance(raw_machine_flag, (bytes, bytearray)):
+            flag_dict["is_lineup_input_required"] = int.from_bytes(raw_machine_flag, byteorder="big") == 1
+        else:
+            flag_dict["is_lineup_input_required"] = bool(raw_machine_flag)
+
+        # Transform is_registration_event from bit to bool
+        raw_machine_flag = flag_dict.get("is_registration_event")
+        if isinstance(raw_machine_flag, (bytes, bytearray)):
+            flag_dict["is_registration_event"] = int.from_bytes(raw_machine_flag, byteorder="big") == 1
+        else:
+            flag_dict["is_registration_event"] = bool(raw_machine_flag)

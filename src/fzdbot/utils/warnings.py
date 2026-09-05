@@ -89,6 +89,13 @@ class InputWarnings():
     @staticmethod
     async def machine_needed(interaction: discord.Interaction):
         await interaction.response.send_message(
-            "⚠️  Warning: machine option required for this event. Score not added.",
+            "⚠️  Warning: Machine option required for this event. Score not added.",
+            ephemeral=True,
+        )
+    
+    @staticmethod
+    async def lineup_needed(interaction: discord.Interaction):
+        await interaction.response.send_message(
+            "⚠️  Warning: Lineup option required for this event. Score not added.",
             ephemeral=True,
         )

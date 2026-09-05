@@ -11,6 +11,7 @@ from fzdbot.fzd_db import (
     get_registration_period,
     get_event_divisions,
     get_event_teams,
+    get_machines,
     get_machine_config_db,
     get_race_config_db,
     get_user_registrations,
@@ -38,7 +39,7 @@ class Event():
         self.divisions: list[Division] | None = []
         self.teams: list[Team] | None = []
         self.races: list[Race] | None = []
-        self.machines: Machines | None = []
+        self.machines: list[Machine] | None = []
         self.reg_period_id: int | None = None
         self.reg_open: datetime | None = None
         self.reg_close: datetime | None = None
@@ -137,7 +138,9 @@ class Event():
                     event_string += f"**Mode:** {self.mode}   **Scoring:** {self.scoring}\n"
                     event_string += f"**Requires users to enter machine when scoring?:** {'Yes' if self.machine_required is self.machine_required else 'No'}\n"
                     if self.machines:
-                        event_string += f"{self.machines:detail}"
+                        event_string += f"**Machines:**\n"
+                        for machine in self.machines:
+                            event_string += f"{machine:detail}" 
                     event_string += f"**Event Start:** {discord_timestamp(self.start_time, 'long')}\n"
                     event_string += f"**Event End:** {discord_timestamp(self.end_time, 'long')}\n"
                     if self.teams:
@@ -228,7 +231,7 @@ class Event():
         """
         async with get_db_connection() as db:
             reg_period = await get_registration_period(db, scheduled_event_id)
-            return reg_period["reg_period_id"], reg_period["reg_open"], reg_period["reg_close"]
+        return reg_period["reg_period_id"], reg_period["reg_open"], reg_period["reg_close"]
 
 
     @staticmethod
@@ -320,7 +323,7 @@ class Event():
             task_sched = evg.create_task(Event._get_registration_period(self.scheduled_event_id))
             task_div = evg.create_task(Event._get_event_divisions(self.scheduled_event_id))
             task_team = evg.create_task(Event._get_event_teams(self.scheduled_event_id))
-            task_machines = evg.create_task(Machines.get_machines_from_database(self.scheduled_event_id))
+            task_machines = evg.create_task(Machine.get_machines_from_database(self.scheduled_event_id))
 
         self.description = task_desc.result()
         self.reg_period_id, self.reg_open, self.reg_close = task_sched.result()
@@ -497,45 +500,12 @@ class Machine():
         return hash((self.db_id, self.name))
 
 
-class Machines():
-    def __init__(self):
-            self.config_id: int | None = None
-            self.machines: list[Machine] | None = []
-
-
-    def __format__(self, format_spec: str) -> Literal["detail"] | None:
-        """Provides a formatted list of strings."""
-        match format_spec:
-            case "detail":
-                if not self:
-                    return None
-                else:
-                    machine_string = ""
-                    machine_string += f"**Machines permitted:\n"
-                    for machine in self.machines:
-                        machine_string += f"{machine:detail}"
-                    return machine_string
-            case _:
-                raise ValueError("Unknown format specifier...")
-
-
-    def append(self, machine: Machine):
-        self.machines.append(machine)
-
-
-    def remove(self, machine: Machine):
-        if self.machines:
-            try:
-                self.machines.remove(machine)
-            except:
-                print(f"machine not present in machine list.")
-
-
-    def dict_to_machine(machine_dict_list: list[dict]) -> Self:
+    @staticmethod
+    def dict_to_machine(machine_dict_list: list[dict]) -> list[Self]:
         """ Takes list of dictionaries and returns a list of machine 
             object instances.
         """
-        machine_list: Machines = Machines()
+        machine_list: list[Machine] = []
         for machine_dict in machine_dict_list:
             machine = Machine()
             machine.db_id = machine_dict["id"]
@@ -544,42 +514,42 @@ class Machines():
         return machine_list
 
 
-    def machine_list_to_json(self) -> str:
-        if not self:
+    def machine_list_to_json(machine_list: list[Self]) -> str:
+        if not machine_list:
             return None
         else:
             machine_json = "["
-            for i, machine in enumerate(self.machines, start=1):
+            for i, machine in enumerate(machine_list, start=1):
                 machine_json += f'{{"db_id": {machine.db_id}}}'
-                if i != len(self.machines):
+                if i != len(machine_list):
                     machine_json += ','
             machine_json += "]"
             return machine_json
 
 
-    async def send_machines_to_database(self, scheduled_event_id: int) -> None:
+    @staticmethod
+    async def send_machines_to_database(machine_list: list[Self], scheduled_event_id: int) -> None:
         """
         """
-        machine_json = self.machine_list_to_json()
+        machine_json = Machine.machine_list_to_json(machine_list)
 
         async with get_db_connection() as db:
-            self.config_id = await update_event_machines(
-                db, self.config_id, scheduled_event_id, machine_json)
+            await update_event_machines(db, scheduled_event_id, machine_json)
 
 
     @staticmethod
-    async def get_machines_from_database(scheduled_event_id) -> Self:
+    async def get_machines_from_database(scheduled_event_id) -> list[Self]:
         """
         """
-        ms = Machines()
         async with get_db_connection() as db:
-            config_id, machine_dict = await get_machine_config_db(db, scheduled_event_id)
+            machine_dict = await get_machine_config_db(db, scheduled_event_id)
+            if not machine_dict:
+                machine_dict = await get_machines(db)
 
-        ms.config_id = config_id
-
+        ms: list[Machine] = []
         for machine in machine_dict:
             m = Machine()
-            m.db_id = machine["id"]
+            m.db_id = int(machine["id"])
             m.name = machine["name"]
             ms.append(m)
 
