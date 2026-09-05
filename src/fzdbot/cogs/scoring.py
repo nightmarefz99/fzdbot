@@ -22,7 +22,7 @@ from fzdbot.fzd_db import (
     get_event_config_flags,
     get_user_scores,
     get_event_lineups_and_scores,
-    get_prix_options,
+    get_default_lineups,
     submit_score,
     submit_score_sql
 )
@@ -53,6 +53,12 @@ class Scoring(commands.Cog):
     _ACTIVE_TTL_SECONDS: int = 10
     _MAXSCORE = 1000000  # arbitrarily set for now
 
+
+    # ==========================================================================================
+    #   Init Method
+    # =============================================================================
+
+
     def __init__(self, bot: commands.Bot, machine_dict: list[dict[str, str]]):
         self.bot = bot
         self.machine_dict = machine_dict
@@ -73,9 +79,6 @@ class Scoring(commands.Cog):
         """ Gets config information to support autocomplete and slash commands.
             Triggered upon autocomplete when cache expired.
         """
-        all_prix_shortnames = ["knight", "queen", "king", "ace", "mknight",
-                                "mqueen", "mking", "mace", "MP", "cMP", "99",
-                                "classic", "TB", "MP", "cMP", "WT", "mWT"]
         # Load config information from the database
         async with get_db_connection() as db:
             active_event = await check_for_active_event(db)
@@ -83,10 +86,6 @@ class Scoring(commands.Cog):
 
             if active_event and user_id:
                 lineup_dict_list = await get_event_lineups_and_scores(db, active_event["id"], user_id)
-                if not lineup_dict_list:
-                    # This is an error in that it has the wrong id (needs to be lineup.id)
-                    #   MUST FIX
-                    default_lineup_list = get_prix_options(db, "all")
                 
                 machine_dict_list = await get_machine_config_db(db, active_event["id"])
                 if not machine_dict_list:
@@ -96,13 +95,13 @@ class Scoring(commands.Cog):
 
         # Set event flags
         if not event_config_flag_dict:
-            self_EVENT_CONFIG_CACHE["is_lineup_input_required"] = False
-            self_EVENT_CONFIG_CACHE["is_machine_input_required"] = False
-            self_EVENT_CONFIG_CACHE["is_registration_event"] = False
+            self._EVENT_CONFIG_CACHE["is_lineup_input_required"] = False
+            self._EVENT_CONFIG_CACHE["is_machine_input_required"] = False
+            self._EVENT_CONFIG_CACHE["is_registration_event"] = False
         else:
-            self_EVENT_CONFIG_CACHE["is_lineup_input_required"] = event_config_flag_dict["is_lineup_input_required"]
-            self_EVENT_CONFIG_CACHE["is_machine_input_required"] = event_config_flag_dict["is_machine_input_required"]
-            self_EVENT_CONFIG_CACHE["is_registration_event"] = event_config_flag_dict["is_registration_event"]
+            self._EVENT_CONFIG_CACHE["is_lineup_input_required"] = event_config_flag_dict["is_lineup_input_required"]
+            self._EVENT_CONFIG_CACHE["is_machine_input_required"] = event_config_flag_dict["is_machine_input_required"]
+            self._EVENT_CONFIG_CACHE["is_registration_event"] = event_config_flag_dict["is_registration_event"]
         
         # Get the lineup list in format easy to create app_commands.Choice entries with.
         self._OPTIONS_CACHE["lineup_option_list"] = []
@@ -113,16 +112,14 @@ class Scoring(commands.Cog):
                 if lineup_dict["score"]:
                     lineup_string += f" - score {lineup_dict["score"]}"
                 self._OPTIONS_CACHE["lineup_option_list"].append(
-                    {"name": lineup_string, "value": str(lineup_dict["event_lineup_id"]}))
-        else:
-            for lineup_dict in default_lineup_list:
-                self._OPTIONS_CACHE["lineup_option_list"].append(
-                    {"name": lineup_dict["name"], "value": str(lineup_dict["event_lineup_id"]}))
+                    {"name": lineup_string, "value": str(lineup_dict["event_lineup_id"])})
+            # else condition managed in autocomplete method.
 
         # Get the machine list in format easy to create app_commands.Choice entries with.
+        self._OPTIONS_CACHE["machine_option_list"] = []
         for machine_dict in machine_dict_list:
             self._OPTIONS_CACHE["machine_option_list"].append(
-                {"name": machine_dict["name"], "value": str(machine_dict["id"]}))
+                {"name": machine_dict["name"], "value": str(machine_dict["id"])})
         
         self._OPTIONS_CACHE["last_updated"] = time.monotonic()
 
@@ -173,7 +170,7 @@ class Scoring(commands.Cog):
                 return [app_commands.Choice(name="No user id. Use command `/fzd_set_name` to add yourself.", value="-2")]
         
         options = [opt for opt in self._OPTIONS_CACHE["machine_option_list"] if current.casefold() in opt["name"].casefold()]
-        return [app_commands.Choice(name=option["name"], value=option["id"]) for option in options[:4]]
+        return [app_commands.Choice(name=option["name"], value=option["value"]) for option in options[:4]]
 
 
     async def lineup_score_autocomplete(self, 
@@ -195,13 +192,11 @@ class Scoring(commands.Cog):
             active_event, user_id = await self.get_event_config_from_db(interaction.user.name)
 
             if not active_event:
-                return [app_commands.Choice(name="No active event", value="-1")]
+                return [app_commands.Choice(name="No active event", value=str(-1))]
             if not user_id:
-                return [app_commands.Choice(name="No user id. Use command `/fzd_set_name` to add yourself.", value="-2")]
+                return [app_commands.Choice(name="No user id. Use command `/fzd_set_name` to add yourself.", value=str(-2))]
             if not self._OPTIONS_CACHE["lineup_option_list"]:
-                # Note: this condition should not trigger, as all possible 
-                #   options are fetched if there are no event-specific lineups.
-                return [app_commands.Choice(name="No lineups are available for this event.", value="-3")]
+                return [app_commands.Choice(name="No lineups are available for this event.", value=str(-3))]
                     
             options = [opt for opt in self._OPTIONS_CACHE["lineup_option_list"] if current.casefold() in opt["name"].casefold()]
             # Note discord limit is 25 options; only first 25 options provided if exceeded.
@@ -248,10 +243,10 @@ class Scoring(commands.Cog):
             if not any(int(option.get("value")) == int(lineup) for option in self._OPTIONS_CACHE["lineup_option_list"]) and lineup is not None:
                 await InputWarnings.lineup_not_found(interaction)
                 return
-            if _EVENT_CONFIG_CACHE["is_machine_input_required"] is True and machine is None:
+            if self._EVENT_CONFIG_CACHE["is_machine_input_required"] is True and machine is None:
                 await InputWarnings.machine_needed(interaction)
                 return
-            if _EVENT_CONFIG_CACHE["is_lineup_input_required"] is True and lineup is None:
+            if self._EVENT_CONFIG_CACHE["is_lineup_input_required"] is True and lineup is None:
                 await InputWarnings.lineup_needed(interaction)
                 return
 

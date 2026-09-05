@@ -993,66 +993,6 @@ async def update_event_race_options(db, scheduled_event_id: int, race_json: str)
     await execute_query(db, sql_update_race_options, params=params, fetch=None, isProc=False)
 
 
-async def get_private_prix_options(db) -> dict:
-    """ Output dictionary format:
-        - id (int)
-        - name (str)
-        - mode (str)
-        - tickets (int)
-    """
-    sql_get_private_prix = """ SELECT
-                                    g.id AS db_id,
-                                    g.name AS name,
-                                    g.mode AS mode,
-                                    gp.tickets AS tickets
-                                FROM grand_prix g
-                                CROSS JOIN game_modes gp ON gp.short_name = 'GP'
-
-                                UNION ALL
-
-                                SELECT 
-                                    m.id AS db_id,
-                                    m.name AS name,
-                                    m.mode AS mode,
-                                    m.tickets AS tickets
-                                FROM game_modes m
-                                WHERE m.short_name IN ('99', 'Pro', 'TB', 'cMP', 'MP');
-                            """
-    prix_dict = await execute_query(db, sql_get_private_prix, params=None, fetch="all", isProc=False)
-
-    return prix_dict
-
-
-async def get_public_prix_options(db) -> dict:
-    """ Output dictionary format:
-        - id (int)
-        - name (str)
-        - mode (str)
-        - tickets (int)
-    """
-    sql_get_private_prix = """ SELECT
-                                    g.id AS db_id,
-                                    g.name AS name,
-                                    g.mode AS mode,
-                                    gp.tickets AS tickets
-                                FROM grand_prix g
-                                CROSS JOIN game_modes gp ON gp.short_name = 'GP'
-
-                                UNION ALL
-
-                                SELECT 
-                                    m.id AS db_id,
-                                    m.name AS name,
-                                    m.mode AS mode,
-                                    m.tickets AS tickets
-                                FROM game_modes m
-                                WHERE m.short_name IN ('cMP', 'MP', 'WT', 'mWT');
-                            """
-    prix_dict = await execute_query(db, sql_get_private_prix, params=None, fetch="all", isProc=False)
-
-    return prix_dict
-
-
 async def get_prix_options(db, public: Literal["public","private","all"]) -> dict:
     """ Output dictionary format:
         - id (int)
@@ -1093,6 +1033,35 @@ async def get_prix_options(db, public: Literal["public","private","all"]) -> dic
     prix_dict = await execute_query(db, sql_get_private_prix, params=None, fetch="all", isProc=False)
 
     return prix_dict
+
+
+async def get_default_lineups(db):
+    """ Get all generic lineup options. Note that the options are hard-coded here.
+        Options retrieved: 
+            "knight", "queen", "king", "ace", "mknight",
+            "mqueen", "mking", "mace", "???",
+            "MP", "cMP", "99", "classic", "TB", "WT", "mWT"
+        
+        Output dictionary format:
+        - event_lineup_id
+        - name
+    """
+    sql_get_default_lineups =   """ SELECT id AS event_lineup_id,
+                                            name AS name
+                                    FROM lineups
+                                    WHERE id IN ('1', '2', '3', '4', 
+                                                '5', '6', '7', '8', 
+                                                '9', '20', '100', '1000', 
+                                                '1050', '1150', '1200', '1300')
+
+                                """
+    prix_dict = await execute_query(db, sql_get_default_lineups, params=None, fetch="all", isProc=False)
+
+    if prix_dict:
+        return prix_dict
+    else:
+        raise ValueError("No default lineups. These should be hard-coded.")
+        return None
 
 
 async def get_race_config_db(db, scheduled_event_id):
@@ -1205,7 +1174,7 @@ async def get_event_config_flags(db, scheduled_event_id: int) -> dict:
                             WHERE scheduled_event_id = %s 
                         """
     params = (scheduled_event_id,)
-    flag_dict = await execute_query(db, sql_get_config, params=params, fetch="all", isProc=False)
+    flag_dict = await execute_query(db, sql_get_config, params=params, fetch="one", isProc=False)
 
     if not flag_dict:
         return None
