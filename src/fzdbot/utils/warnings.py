@@ -46,7 +46,7 @@ class InputWarnings():
                 )
             case "rank":
                 await interaction.response.send_message(
-                    f"⚠️  Warning: {method} requires rank results, please use /fzd_add_rank ",
+                    f"⚠️  Warning: {event_name} requires rank results, please use /fzd_add_rank ",
                     ephemeral=True,
                 )
 
@@ -74,8 +74,9 @@ class InputWarnings():
     @staticmethod
     async def machine_not_found(interaction: discord.Interaction, 
                                 machine: str, machine_list: list[str]):
+        machine_names = [machine["name"] for machine in machine_list]
         await interaction.response.send_message(
-            f"⚠️  Warning: {machine} not one of the options {machine_list}. Score not added.",
+            f"⚠️  Warning: {machine} not one of the options {machine_names}. Score not added.",
             ephemeral=True,
         )
 

@@ -251,7 +251,15 @@ async def submit_score_sql(db, dataentry) -> int:
               dataentry[0], dataentry[1], dataentry[0],
               dataentry[4], dataentry[5], dataentry[1],)
     await execute_query(db, sql_new_row, params=params, fetch=None, isProc=False)
-    return dataentry[2]
+
+    # Get points given (most relevant in "rank" situations)
+    sql_get_points =    """ SELECT points + bonus_points AS points
+                            FROM kingmaker_points kp
+                            WHERE placement = %s;
+                        """
+    params = (dataentry[2],)
+    points = await execute_query(db, sql_get_points, params=params, fetch="one", isProc=False)
+    return points["points"]
 
 
 async def edit_score(db, dataentry) -> None:
@@ -276,7 +284,12 @@ async def delete_score(db, dataentry) -> None:
 
 async def get_user_scores(db, user_name, check_for_score_method=False) -> list[dict[str, str]]:
     """Query the database for scores of active event of a given user
-    Returns all values as strings for autocomplete bot feature
+    Returns all values as strings for autocomplete bot feature.
+    Returns lineup information if the event has a lineup.
+    - score
+    - id
+    - lineup_num
+    - lineup_name
     """
     active_event = await check_for_active_event(db)
     if active_event["name"] == "NULL":
@@ -285,15 +298,25 @@ async def get_user_scores(db, user_name, check_for_score_method=False) -> list[d
         return [{"score": "DISABLED FOR THIS EVENT", "id": "-888"}]
     db_user_id = await get_user_id(db, user_name)
 
-    sql_getscores = """SELECT CAST(score AS CHAR) AS score, 
-                              CAST(id AS CHAR) AS id
-                       FROM event_result_points 
-                       WHERE user_id = %s AND scheduled_event_id = %s 
-                       ORDER BY id ASC;"""
+    sql_getscores = """SELECT CAST(erp.score AS CHAR) AS score, 
+                            CAST(erp.id AS CHAR) AS id,
+                            el.lineup_num AS lineup_num,
+                            l.name AS lineup_name
+                        FROM event_result_points erp
+                        LEFT JOIN event_lineups el
+                            ON erp.event_lineup_id = el.id
+                        LEFT JOIN lineups l
+                            ON el.lineup_id = l.id
+                        WHERE erp.user_id = %s AND erp.scheduled_event_id = %s
+                        ORDER BY id ASC;
+                    """
     scoresdict = await execute_query(db, sql_getscores, params=(db_user_id, active_event["id"]), fetch="all")
 
     if not scoresdict:
-        return [{"score": "NO USER SCORES FOUND", "id": "-999"}]
+        return [{"score": "NO USER SCORES FOUND", 
+        "id": "-999", 
+        "lineup_num": None,
+        "lineup_name": None}]
 
     return scoresdict
 

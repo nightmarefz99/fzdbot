@@ -130,23 +130,71 @@ class Scoring(commands.Cog):
     # Autocomplete handlers
     # ------------------------------------------------------------------
     async def user_scores_autocomplete(self, interaction: discord.Interaction, current: str):
+        """ Score order is presented to the user by order of entry if there are no
+            lineups, or by lineup order if there are lineups.
+        """
         async with get_db_connection() as db:
-            user_scores = await get_user_scores(db, interaction.user.name)
+            user_score_info = await get_user_scores(db, interaction.user.name)
+
+        sort_flag = False
+        unsorted_scores = []
+        for i, score in enumerate(user_score_info):
+            if score["lineup_num"] and score["lineup_name"]:
+                sort_flag = True
+                unsorted_scores.append(
+                    {"display": f"{score["lineup_num"]}: {score["lineup_name"]} - score {score["score"]}",
+                    "score": score["score"],
+                    "id": score["id"]}
+                )
+            else:
+                unsorted_scores.append(
+                    {"display": score["score"],
+                    "score": score["score"],
+                    "id": score["id"]}
+                )
+            if sort_flag:
+                user_scores = sorted(unsorted_scores, key=lambda x:x["display"])
+            else:
+                user_scores = unsorted_scores
 
         # Filter based on what the user is currently typing
-        choices = [(opt["score"], opt["id"]) for opt in user_scores if current.casefold() in opt["score"].casefold()]
+        choices = [(opt["display"], opt["score"], opt["id"]) for opt in user_scores if current.casefold() in opt["display"].casefold()]
         # Return up to 25 results (discord limit)
-        return [app_commands.Choice(name=opt, value=f"{opt}|{idopt}") for opt, idopt in choices[:25]]
+        return [app_commands.Choice(name=opt[0], value=f"{opt[1]}|{opt[2]}") for opt in choices[:25]]
 
 
     async def user_scores_autocomplete_nokingmaker(self, interaction: discord.Interaction, current: str):
+        """ Score order is presented to the user by order of entry if there are no
+            lineups, or by lineup order if there are lineups.
+        """
         async with get_db_connection() as db:
-            user_scores = await get_user_scores(db, interaction.user.name, check_for_score_method=True)
+            user_score_info = await get_user_scores(db, interaction.user.name, check_for_score_method=True)
+
+        sort_flag = False
+        unsorted_scores = []
+        for i, score in enumerate(user_score_info):
+            if score["lineup_num"] and score["lineup_name"]:
+                sort_flag = True
+                unsorted_scores.append(
+                    {"display": f"{score["lineup_num"]}: {score["lineup_name"]} - score {score["score"]}",
+                    "score": score["score"],
+                    "id": score["id"]}
+                )
+            else:
+                unsorted_scores.append(
+                    {"display": score["score"],
+                    "score": score["score"],
+                    "id": score["id"]}
+                )
+            if sort_flag:
+                user_scores = sorted(unsorted_scores, key=lambda x:x["display"])
+            else:
+                user_scores = unsorted_scores
 
         # Filter based on what the user is currently typing
-        choices = [(opt["score"], opt["id"]) for opt in user_scores if current.casefold() in opt["score"].casefold()]
+        choices = [(opt["display"], opt["score"], opt["id"]) for opt in user_scores if current.casefold() in opt["display"].casefold()]
         # Return up to 25 results (discord limit)
-        return [app_commands.Choice(name=opt, value=f"{opt}|{idopt}") for opt, idopt in choices[:25]]
+        return [app_commands.Choice(name=opt[0], value=f"{opt[1]}|{opt[2]}") for opt in choices[:25]]
 
 
     async def machine_autocomplete(
@@ -215,6 +263,7 @@ class Scoring(commands.Cog):
     )  # , guild=GUILD_ID)
     @app_commands.describe(score="Enter an integer value for the score during an event")
     @app_commands.describe(machine="Select the machine used")
+    @app_commands.describe(lineup="Select the race or prix you participated in")
     async def add_score(self, interaction: discord.Interaction, score: str, machine: str = None, lineup: str = None):
         try:
             if int(score) < 0:
@@ -233,12 +282,18 @@ class Scoring(commands.Cog):
                 await InputWarnings.no_event(interaction, "points")
                 return
             if current_event["scoring_method"] != "points":
-                await InputWarnings.wrong_scoring_method(interaction, current_event["name"], "points")
+                await InputWarnings.wrong_scoring_method(interaction, current_event["name"], "rank")
                 return
-            if not any(int(option.get("value")) == int(machine) for option in self._OPTIONS_CACHE["machine_option_list"]) and machine is not None:
+            if machine is not None and not machine.isnumeric():
                 await InputWarnings.machine_not_found(interaction, machine, self._OPTIONS_CACHE["machine_option_list"])
                 return
-            if not any(int(option.get("value")) == int(lineup) for option in self._OPTIONS_CACHE["lineup_option_list"]) and lineup is not None:
+            if machine is not None and not any(int(option.get("value")) == int(machine) for option in self._OPTIONS_CACHE["machine_option_list"]) and machine is not None:
+                await InputWarnings.machine_not_found(interaction, machine, self._OPTIONS_CACHE["machine_option_list"])
+                return
+            if lineup is not None and not lineup.isnumeric():
+                await InputWarnings.lineup_not_found(interaction)
+                return
+            if lineup is not None and not any(int(option.get("value")) == int(lineup) for option in self._OPTIONS_CACHE["lineup_option_list"]) and lineup is not None:
                 await InputWarnings.lineup_not_found(interaction)
                 return
             if self._EVENT_CONFIG_CACHE["is_machine_input_required"] is True and machine is None:
@@ -248,20 +303,29 @@ class Scoring(commands.Cog):
                 await InputWarnings.lineup_needed(interaction)
                 return
 
+        # Check to ensure that int | None passed in user_data, not str
             # Process machine info
             if machine is not None:
                 machine_name = next(
                     (item["name"] for item in self._OPTIONS_CACHE["machine_option_list"] if item.get("id") == int(machine)), None)
+                machine_id = int(machine)
             else:
                 machine_name = None
+                machine_id = None
+            
+            # Process lineup info
+            if lineup is not None:
+                lineup_id = int(lineup)
+            else:
+                lineup_id = None
 
             user_data = [
                 db_user_id,
                 current_event["id"],
                 int(score),
                 current_event["scoring_method"],
-                int(machine),
-                int(lineup),
+                machine_id,
+                lineup_id,
             ]
 
             # Add score to database
@@ -286,7 +350,7 @@ class Scoring(commands.Cog):
             )
         except OverflowError:
             await interaction.response.send_message(
-                f"❌ ERROR! 'score' should not be larger than {maxscore}. Please be nice to Nightmare's bot.",
+                f"❌ ERROR! 'score' should not be larger than {self._MAXSCORE}. Please be nice to Nightmare's bot.",
                 ephemeral=True,
             )
         except TypeError:
@@ -316,19 +380,20 @@ class Scoring(commands.Cog):
     )  # , guild=GUILD_ID)
     @app_commands.describe(rank="Enter an integer value for the placement rank (1-99) during an event")
     @app_commands.describe(machine="Select the machine used")
-    async def add_rank(self, interaction: discord.Interaction, rank: str, machine: str = None):
+    @app_commands.describe(lineup="Select the race or prix you participated in")
+    async def add_rank(self, interaction: discord.Interaction, rank: str, machine: str = None, lineup: str = None):
         maxrank = 99
         try:
             if int(rank) < 1 or int(rank) > maxrank:
                 raise ValueError(f"rank must be between 1 and 99 {interaction.user}")
 
-            # Get user id first, or add user if not registered in database
+            # Set class configs and get user and event information
             async with get_db_connection() as db:
-                db_user_id = await get_or_create_db_user(db, interaction.user)
-                machine_list = [s["name"] for s in self.machine_dict if "name" in s]
-
-                # check an event is active before adding data
-                current_event = await check_for_active_event(db)
+                current_event, db_user_id = await self.get_event_config_from_db(interaction.user.name)
+                if not db_user_id:
+                    # Ensure db_user_id created in database
+                    async with get_db_connection() as db:
+                        db_user_id = await get_or_create_db_user(db, interaction.user)
 
             logger.debug("add_rank current_event=%r", current_event)
             if current_event["name"] == "NULL":
@@ -337,37 +402,57 @@ class Scoring(commands.Cog):
             if current_event["scoring_method"] == "points":
                 await InputWarnings.wrong_scoring_method(interaction, current_event["name"], "points")
                 return
-            if machine not in machine_list and machine is not None:
-                await InputWarnings.machine_not_found(interaction, machine, machine_list)
+            if machine is not None and not machine.isnumeric():
+                await InputWarnings.machine_not_found(interaction, machine, self._OPTIONS_CACHE["machine_option_list"])
                 return
-            if current_event.get("is_machine_input_required") is True and machine is None:
+            if machine is not None and not any(int(option.get("value")) == int(machine) for option in self._OPTIONS_CACHE["machine_option_list"]) and machine is not None:
+                await InputWarnings.machine_not_found(interaction, machine, self._OPTIONS_CACHE["machine_option_list"])
+                return
+            if lineup is not None and not lineup.isnumeric():
+                await InputWarnings.lineup_not_found(interaction)
+                return
+            if lineup is not None and not any(int(option.get("value")) == int(lineup) for option in self._OPTIONS_CACHE["lineup_option_list"]) and lineup is not None:
+                await InputWarnings.lineup_not_found(interaction)
+                return
+            if self._EVENT_CONFIG_CACHE["is_machine_input_required"] is True and machine is None:
                 await InputWarnings.machine_needed(interaction)
                 return
+            if self._EVENT_CONFIG_CACHE["is_lineup_input_required"] is True and lineup is None:
+                await InputWarnings.lineup_needed(interaction)
+                return
 
+
+        # Check to ensure that int | None passed in user_data, not str
+            # Process machine info
             if machine is not None:
-                machine_choice = next(
-                    (item for item in self.machine_dict if item.get("name") == machine), None
-                )
-                machine_choice_id = machine_choice["id"] if machine_choice else None
-                machine_choice_name = machine_choice["name"] if machine_choice else None
+                machine_name = next(
+                    (item["name"] for item in self._OPTIONS_CACHE["machine_option_list"] if item.get("id") == int(machine)), None)
+                machine_id = int(machine)
             else:
-                machine_choice_id = None
-                machine_choice_name = None
+                machine_name = None
+                machine_id = None
+            
+            # Process lineup info
+            if lineup is not None:
+                lineup_id = int(lineup)
+            else:
+                lineup_id = None
 
             user_data = [
                 db_user_id,
                 current_event["id"],
                 int(rank),
                 current_event["scoring_method"],
-                machine_choice_id,
+                machine_id,
+                lineup_id,
             ]
 
             # Add rank to database
             async with get_db_connection() as db:
-                return_score = await submit_score(db, user_data)  # interaction.user
+                return_score = await submit_score_sql(db, user_data)  # interaction.user
 
             await interaction.response.send_message(
-                f"✅ User {interaction.user} has entered rank {rank} → {return_score} points have been added to {current_event['name']} using machine {machine_choice_name}"
+                f"✅ User {interaction.user} has entered rank {rank} → {return_score} points have been added to {current_event['name']} using machine {machine_name}"
             )  # , ephemeral=True)
             logger.info(
                 "User %s entered rank=%s (%s points) for event=%s machine=%s",
@@ -375,7 +460,7 @@ class Scoring(commands.Cog):
                 rank,
                 return_score,
                 current_event["name"],
-                machine_choice_name,
+                machine_name,
             )
 
         except (
@@ -547,6 +632,7 @@ class Scoring(commands.Cog):
         self.add_score.autocomplete("machine")(self.machine_autocomplete)
         self.add_score.autocomplete("lineup")(self.lineup_score_autocomplete)
         self.add_rank.autocomplete("machine")(self.machine_autocomplete)
+        self.add_rank.autocomplete("lineup")(self.lineup_score_autocomplete)
 
 
 async def setup(bot: commands.Bot):
