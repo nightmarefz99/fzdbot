@@ -262,6 +262,50 @@ async def submit_score_sql(db, dataentry) -> int:
     return points["points"]
 
 
+async def submit_time_sql(db, dataentry) -> int:
+    """Executes sql query command to insert data to database
+        THIS VERSION 1) Uses SQL instead of a stored procedure, and 2) adds the lineup_id if it exists
+        db = database connection object
+        dataentry = [ user_id, scheduled_event_id, time, scoring_method, machine_choice_id, lineup_id ] 
+            - all integers except `scoring_method`, which is a string enum ["points", "rank", "time"]
+    """
+    sql_new_row = """   REPLACE INTO event_result_points
+                            (scheduled_event_id, event_lineup_id, user_id, team_id, division_id, machine_id, time)
+
+                        SELECT 
+                            %s AS scheduled_event_id, 
+                            %s AS event_lineup_id,
+                            %s AS user_id, 
+                            teams.team_id, 
+                            divisions.division_id,
+                            machines.id,
+                            %s AS time
+                        FROM events_scheduled es
+
+                        LEFT JOIN (
+                            SELECT ut.user_id, ut.team_id
+                            FROM user_teams ut
+                            JOIN teams t ON t.id = ut.team_id
+                            WHERE t.scheduled_event_id = %s
+                        ) teams ON teams.user_id = %s
+                        LEFT JOIN (
+                            SELECT ud.user_id, ud.division_id
+                            FROM user_divisions ud
+                            JOIN divisions d ON d.id = ud.division_id
+                            WHERE d.scheduled_event_id = %s
+                        ) divisions ON divisions.user_id = %s
+                        LEFT JOIN machines 
+                            ON machines.id = %s
+                        LEFT JOIN event_lineups ON event_lineups.id = %s
+                        WHERE es.id = %s
+                    """
+    params = (dataentry[1], dataentry[5], dataentry[0],
+              dataentry[2], dataentry[1], dataentry[0], 
+              dataentry[1], dataentry[0],
+              dataentry[4], dataentry[5], dataentry[1],)
+    await execute_query(db, sql_new_row, params=params, fetch=None, isProc=False)
+
+
 async def edit_score(db, dataentry) -> None:
     """Executes sql query command to insert data to database
     db = database connection object
@@ -282,7 +326,7 @@ async def delete_score(db, dataentry) -> None:
     await execute_query(db, sql_deleterow, params=dataentry, fetch=None)
 
 
-async def get_user_scores(db, user_name, check_for_score_method=False) -> list[dict[str, str]]:
+async def get_user_scores(db, user_name: str, check_for_score_method=False) -> list[dict[str, str, int, str]]:
     """Query the database for scores of active event of a given user
     Returns all values as strings for autocomplete bot feature.
     Returns lineup information if the event has a lineup.
@@ -294,7 +338,7 @@ async def get_user_scores(db, user_name, check_for_score_method=False) -> list[d
     active_event = await check_for_active_event(db)
     if active_event["name"] == "NULL":
         return [{"score": "NO CURRENT EVENT", "id": "-999"}]
-    elif check_for_score_method and active_event["scoring_method"] == "placement":
+    elif check_for_score_method and active_event["scoring_method"] != "points":
         return [{"score": "DISABLED FOR THIS EVENT", "id": "-888"}]
     db_user_id = await get_user_id(db, user_name)
 
@@ -319,6 +363,45 @@ async def get_user_scores(db, user_name, check_for_score_method=False) -> list[d
         "lineup_name": None}]
 
     return scoresdict
+
+
+async def get_user_times(db, user_name, check_for_score_method=False) -> list[dict[str, str]]:
+    """Query the database for scores of active event of a given user
+    Returns all values as strings for autocomplete bot feature.
+    Returns lineup information if the event has a lineup.
+    - time
+    - id
+    - lineup_num
+    - lineup_name
+    """
+    active_event = await check_for_active_event(db)
+    if active_event["name"] == "NULL":
+        return [{"time": "NO CURRENT EVENT", "id": "-999"}]
+    elif check_for_score_method and active_event["scoring_method"] != "time":
+        return [{"time": "DISABLED FOR THIS EVENT", "id": "-888"}]
+    db_user_id = await get_user_id(db, user_name)
+
+    sql_gettimes = """SELECT CAST(erp.time AS CHAR) AS score, 
+                            CAST(erp.id AS CHAR) AS id,
+                            el.lineup_num AS lineup_num,
+                            l.name AS lineup_name
+                        FROM event_result_points erp
+                        LEFT JOIN event_lineups el
+                            ON erp.event_lineup_id = el.id
+                        LEFT JOIN lineups l
+                            ON el.lineup_id = l.id
+                        WHERE erp.user_id = %s AND erp.scheduled_event_id = %s
+                        ORDER BY id ASC;
+                    """
+    timesdict = await execute_query(db, sql_gettimes, params=(db_user_id, active_event["id"]), fetch="all")
+
+    if not timesdict:
+        return [{"time": "NO USER SCORES FOUND", 
+        "id": "-999", 
+        "lineup_num": None,
+        "lineup_name": None}]
+
+    return timesdict
 
 
 async def get_latest_event(db, event_id=None):
@@ -1164,21 +1247,41 @@ async def get_machine_config_db(db, scheduled_event_id: int) -> dict | None:
         return m_dict
 
 
-async def get_event_lineups_and_scores(db, scheduled_event_id: int, user_id: int) -> list[dict]:
+async def get_event_lineups_and_scores(db, scheduled_event_id: int, 
+    scoring_method: Literal["points","rank","time"], user_id: int) -> list[dict]:
+    """ Gets lineups and scores, or times, based on input parameter scoring_method.
+        Note that output of time is of type timedelta.
     """
-    """
-    sql_lineup_and_score =  """ SELECT el.id AS event_lineup_id,
-                                    el.lineup_num AS lineup_num,
-                                    l.name AS lineup_name,
-                                    ep.score AS score
-                                FROM event_lineups el
-                                INNER JOIN lineups l
-                                ON l.id = el.lineup_id AND el.scheduled_event_id = %s
-                                LEFT JOIN event_result_points ep
-                                ON el.id = ep.event_lineup_id
-                                    AND el.scheduled_event_id = %s
-                                    AND ep.user_id = %s
-                            """
+    match scoring_method:
+        case "points" | "rank":
+            sql_lineup_and_score =  """ SELECT el.id AS event_lineup_id,
+                                            el.lineup_num AS lineup_num,
+                                            l.name AS lineup_name,
+                                            ep.score AS score
+                                        FROM event_lineups el
+                                        INNER JOIN lineups l
+                                        ON l.id = el.lineup_id AND el.scheduled_event_id = %s
+                                        LEFT JOIN event_result_points ep
+                                        ON el.id = ep.event_lineup_id
+                                            AND el.scheduled_event_id = %s
+                                            AND ep.user_id = %s
+                                    """
+        case "time":
+            sql_lineup_and_score =  """ SELECT el.id AS event_lineup_id,
+                                            el.lineup_num AS lineup_num,
+                                            l.name AS lineup_name,
+                                            ep.time AS score
+                                        FROM event_lineups el
+                                        INNER JOIN lineups l
+                                        ON l.id = el.lineup_id AND el.scheduled_event_id = %s
+                                        LEFT JOIN event_result_points ep
+                                        ON el.id = ep.event_lineup_id
+                                            AND el.scheduled_event_id = %s
+                                            AND ep.user_id = %s
+                                    """
+        case _:
+            raise ValueError(f"Scoring method must be 'points', 'rank', or 'time, not {scoring_method}.")
+
     params = (scheduled_event_id, scheduled_event_id, user_id,)
     lineup_score_dict = await execute_query(db, sql_lineup_and_score, params=params, fetch="all", isProc=False)
 
@@ -1186,6 +1289,7 @@ async def get_event_lineups_and_scores(db, scheduled_event_id: int, user_id: int
         return lineup_score_dict
     else:
         return None
+
 
 async def get_event_config_flags(db, scheduled_event_id: int) -> dict:
     """ Get the simple components of an event config.

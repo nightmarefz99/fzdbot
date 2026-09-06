@@ -11,33 +11,23 @@ class InputWarnings():
 
     @staticmethod
     async def no_event(interaction: discord.Interaction, 
-                       command: Literal["points","rank","edit","delete"] ):
+                       command: Literal["points","rank","edit","delete", "time"] ):
         match command:
-            case "points":
+            case "points" | "rank" | "time":
                 await interaction.response.send_message(
-                    "⚠️  Warning: No event is currently active, score was not added!  ", 
+                    f"⚠️  Warning: No event is currently active, {command} was not added!  ", 
                     ephemeral=True
                 )
-            case "rank":
+            case "edit" | "delete":
                 await interaction.response.send_message(
-                    "⚠️  Warning: No event is currently active, rank was not added!  ", 
-                    ephemeral=True
-                )
-            case "edit":
-                await interaction.response.send_message(
-                    "⚠️   No current event active, can't edit scores! If you need help, contact an FZD mod",
-                    ephemeral=True,
-                )
-            case "delete":
-                await interaction.response.send_message(
-                    "⚠️   No current event active, can't delete scores! If you need help, contact an FZD mod",
+                    f"⚠️  Warning: No event is currently active, can't {command} scores! If you need help, contact an FZD mod",
                     ephemeral=True,
                 )
 
 
     @staticmethod
     async def wrong_scoring_method(interaction: discord.Interaction, 
-                                   event_name: str, method: Literal["points","rank"]):
+                                   event_name: str, method: Literal["points","rank","time"]):
         match method:
             case "points":
                 await interaction.response.send_message(
@@ -47,6 +37,11 @@ class InputWarnings():
             case "rank":
                 await interaction.response.send_message(
                     f"⚠️  Warning: {event_name} requires rank results, please use /fzd_add_rank ",
+                    ephemeral=True,
+                )
+            case "time":
+                await interaction.response.send_message(
+                    f"⚠️  Warning: {event_name} requires time submissions, please use /fzd_add_time ",
                     ephemeral=True,
                 )
 
@@ -98,5 +93,28 @@ class InputWarnings():
     async def lineup_needed(interaction: discord.Interaction):
         await interaction.response.send_message(
             "⚠️  Warning: Lineup option required for this event. Score not added.",
+            ephemeral=True,
+        )
+
+
+    @staticmethod
+    async def not_integer(interaction: discord.Interaction, 
+        field: str, method: Literal["score","rank","time"]):
+        """ Warns user of failure to enter an integer.
+        """
+        await interaction.response.send_message(
+            f"⚠️  Warning: {field.capitalize()} must be a positive integer. {method.capitalize()} not added.",
+            ephemeral=True,
+        )
+
+
+    @staticmethod
+    async def out_of_bounds(interaction: discord.Interaction, 
+        field: str, min_val: int | float, max_val: int | float, 
+        method: Literal["score","rank","time"]):
+        """ Warns user of value they entered in a field that is out of logic bounds.
+        """
+        await interaction.response.send_message(
+            f"⚠️  Warning: Out of bounds. {field.capitalize()} must be between {min_val} and {max_val}. {method.capitalize()} not added.",
             ephemeral=True,
         )

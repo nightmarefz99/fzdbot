@@ -3,6 +3,8 @@
 
 import logging
 
+import datetime as dt
+from datetime import datetime, timedelta
 import time
 import asyncio
 import discord
@@ -21,10 +23,11 @@ from fzdbot.fzd_db import (
     get_machine_config_db,
     get_event_config_flags,
     get_user_scores,
+    get_user_times,
     get_event_lineups_and_scores,
     get_default_lineups,
-    submit_score,
-    submit_score_sql
+    submit_score_sql,
+    submit_time_sql
 )
 from fzdbot.settings import get_settings
 from fzdbot.views.confirm_delete import ConfirmDeleteScore
@@ -45,6 +48,7 @@ class Scoring(commands.Cog):
         "last_updated": 0
     }
     _EVENT_CONFIG_CACHE = {
+        "scoring_method": None,
         "is_lineup_input_required": False,
         "is_machine_input_required": False,
         "is_registration_event": False,
@@ -85,7 +89,9 @@ class Scoring(commands.Cog):
             user_id = await get_user_id(db, discord_name)
 
             if active_event and user_id:
-                lineup_dict_list = await get_event_lineups_and_scores(db, active_event["id"], user_id)
+                lineup_dict_list = await get_event_lineups_and_scores(
+                    db, active_event["id"], active_event["scoring_method"], user_id
+                    )
                 
                 machine_dict_list = await get_machine_config_db(db, active_event["id"])
                 if not machine_dict_list:
@@ -103,6 +109,16 @@ class Scoring(commands.Cog):
             self._EVENT_CONFIG_CACHE["is_machine_input_required"] = event_config_flag_dict["is_machine_input_required"]
             self._EVENT_CONFIG_CACHE["is_registration_event"] = event_config_flag_dict["is_registration_event"]
         
+        # Set scoring label based on scoring_method
+        match active_event["scoring_method"]:
+            case "points" | "rank":
+                scoring_label = "score"
+            case "time":
+                scoring_label = "time"
+            case _:
+                raise ValueError(f"Scoring method must be 'points', 'rank', or 'time, not {active_event["scoring_method"]}.")
+        self._EVENT_CONFIG_CACHE["scoring_method"] = active_event["scoring_method"]
+
         # Get the lineup list in format easy to create app_commands.Choice entries with.
         self._OPTIONS_CACHE["lineup_option_list"] = []
         if lineup_dict_list:
@@ -110,7 +126,11 @@ class Scoring(commands.Cog):
             for lineup_dict in lineup_dict_list:
                 lineup_string = f"{lineup_dict["lineup_num"]}: {lineup_dict["lineup_name"]}"
                 if lineup_dict["score"]:
-                    lineup_string += f" - score {lineup_dict["score"]}"
+                    match scoring_label:
+                        case "score":
+                            lineup_string += f" - {scoring_label} {lineup_dict["score"]}"
+                        case "time":
+                            lineup_string += f" - {scoring_label} {(lineup_dict["score"] + datetime.min).strftime("%M:%S:%f")[:-4]}"
                 self._OPTIONS_CACHE["lineup_option_list"].append(
                     {"name": lineup_string, "value": str(lineup_dict["event_lineup_id"])})
             # else condition managed in autocomplete method.
@@ -133,8 +153,28 @@ class Scoring(commands.Cog):
         """ Score order is presented to the user by order of entry if there are no
             lineups, or by lineup order if there are lineups.
         """
+        clock = time.monotonic()
+
+        if clock - self._OPTIONS_CACHE["last_updated"] < self._ACTIVE_TTL_SECONDS:
+            # Do not call database to update event config info
+            ...
+        else:
+            active_event, user_id = await self.get_event_config_from_db(interaction.user.name)
+            if not active_event:
+                return [app_commands.Choice(name="No active event", value="-1")]
+            if not user_id:
+                return [app_commands.Choice(name="No user id. Use command `/fzd_set_name` to add yourself.", value="-2")]  
+        
         async with get_db_connection() as db:
-            user_score_info = await get_user_scores(db, interaction.user.name)
+            match self._EVENT_CONFIG_CACHE["scoring_method"]:
+                case "points" | "rank":
+                    user_score_info = await get_user_scores(db, interaction.user.name)
+                    scoring_label = "score"
+                case "time":
+                    user_score_info = await get_user_times(db, interaction.user.name)
+                    scoring_label = "time"
+                case _:
+                    raise ValueError(f"Scoring method must be 'points', 'rank', or 'time, not {_EVENT_CONFIG_CACHE["scoring_method"]}.")
 
         sort_flag = False
         unsorted_scores = []
@@ -142,7 +182,7 @@ class Scoring(commands.Cog):
             if score["lineup_num"] and score["lineup_name"]:
                 sort_flag = True
                 unsorted_scores.append(
-                    {"display": f"{score["lineup_num"]}: {score["lineup_name"]} - score {score["score"]}",
+                    {"display": f"{score["lineup_num"]}: {score["lineup_name"]} - {scoring_label} {score["score"]}",
                     "score": score["score"],
                     "id": score["id"]}
                 )
@@ -282,7 +322,7 @@ class Scoring(commands.Cog):
                 await InputWarnings.no_event(interaction, "points")
                 return
             if current_event["scoring_method"] != "points":
-                await InputWarnings.wrong_scoring_method(interaction, current_event["name"], "rank")
+                await InputWarnings.wrong_scoring_method(interaction, current_event["name"], current_event["scoring_method"])
                 return
             if machine is not None and not machine.isnumeric():
                 await InputWarnings.machine_not_found(interaction, machine, self._OPTIONS_CACHE["machine_option_list"])
@@ -307,7 +347,7 @@ class Scoring(commands.Cog):
             # Process machine info
             if machine is not None:
                 machine_name = next(
-                    (item["name"] for item in self._OPTIONS_CACHE["machine_option_list"] if item.get("id") == int(machine)), None)
+                    (item["name"] for item in self._OPTIONS_CACHE["machine_option_list"] if item.get("value") == machine), None)
                 machine_id = int(machine)
             else:
                 machine_name = None
@@ -399,8 +439,8 @@ class Scoring(commands.Cog):
             if current_event["name"] == "NULL":
                 await InputWarnings.no_event(interaction, "rank")
                 return
-            if current_event["scoring_method"] == "points":
-                await InputWarnings.wrong_scoring_method(interaction, current_event["name"], "points")
+            if current_event["scoring_method"] != "rank":
+                await InputWarnings.wrong_scoring_method(interaction, current_event["name"], current_event["scoring_method"])
                 return
             if machine is not None and not machine.isnumeric():
                 await InputWarnings.machine_not_found(interaction, machine, self._OPTIONS_CACHE["machine_option_list"])
@@ -426,7 +466,7 @@ class Scoring(commands.Cog):
             # Process machine info
             if machine is not None:
                 machine_name = next(
-                    (item["name"] for item in self._OPTIONS_CACHE["machine_option_list"] if item.get("id") == int(machine)), None)
+                    (item["name"] for item in self._OPTIONS_CACHE["machine_option_list"] if item.get("value") == machine), None)
                 machine_id = int(machine)
             else:
                 machine_name = None
@@ -560,7 +600,14 @@ class Scoring(commands.Cog):
         opts = []
         try:
             async with get_db_connection() as db:
-                valid_options = await get_user_scores(db, interaction.user.name)
+                current_event, db_user_id = await self.get_event_config_from_db(interaction.user.name)
+                match current_event["scoring_method"]:
+                    case "points" | "rank":
+                        valid_options = await get_user_scores(db, interaction.user.name)                        
+                    case "time":
+                        valid_options = await get_user_times(db, interaction.user.name)
+                    case _:
+                        raise ValueError(f"Scoring method must be 'points', 'rank', or 'time, not {current_event["scoring_method"]}.")
 
             opts = [s["score"] for s in valid_options if "score" in s]
             score, idchoice = score_to_delete.split("|")
@@ -625,6 +672,159 @@ class Scoring(commands.Cog):
                     ephemeral=True,
                 )
 
+
+    # =============================================================================================================
+    #   /add_time
+    # =============================================================================================================
+
+    # Add a rank to an event
+    @app_commands.command(
+        name="fzd_add_time", description="Add a time to FZD scoreboard."
+    )  # , guild=GUILD_ID)
+    @app_commands.describe(minutes="Enter an integer value for the minutes")
+    @app_commands.describe(seconds="Enter an integer value for the seconds (0-59)")
+    @app_commands.describe(minutes="Enter an integer value for the centiseconds (0-99)")
+    @app_commands.describe(machine="Select the machine used")
+    @app_commands.describe(lineup="Select the race you participated in")
+    async def add_time(
+        self, interaction: discord.Interaction, 
+        minutes: str, seconds: str, centiseconds: str, 
+        machine: str = None, lineup: str = None):
+
+        # Time limit constants
+        MIN_MINUTES = 0
+        MAX_MINUTES = 5
+        MIN_SECONDS = 0
+        MAX_SECONDS = 59
+        MIN_CENTISECONDS = 0
+        MAX_CENTISECONDS = 99
+
+        try:
+            # Get user and event info, and update config class variables
+            current_event, db_user_id = await self.get_event_config_from_db(interaction.user.name)
+            if not db_user_id:
+                # Ensure db_user_id created in database
+                async with get_db_connection() as db:
+                    db_user_id = await get_or_create_db_user(db, interaction.user)
+
+            # Event and user exception handling
+            if current_event["name"] == "NULL":
+                await InputWarnings.no_event(interaction, "time")
+                return
+            if current_event["scoring_method"] != "time":
+                await InputWarnings.wrong_scoring_method(interaction, current_event["name"], current_event["scoring_method"])
+                return
+
+            # Time exception handling
+            # Check if time parameters are integers. Note that "is_digit" returns 
+            #   False for negative numbers.
+            if not minutes.isdigit():
+                await InputWarnings.not_integer(interaction, "minutes", "time")
+                return
+            if not seconds.isdigit():
+                await InputWarnings.not_integer(interaction, "seconds", "time")
+                return
+            if not centiseconds.isdigit():
+                await InputWarnings.not_integer(interaction, "centiseconds", "time")
+                return
+            minutes_int = int(minutes)
+            seconds_int = int(seconds)
+            centiseconds_int = int(centiseconds)
+            # Check if time parameters (demonstrated to be integers) are within bounds.
+            #   (Note checking for values less than zero belt and suspenders when 
+            #   minimums are set to zero.)
+            if (minutes_int < MIN_MINUTES) or (minutes_int > MAX_MINUTES):
+                await InputWarnings.out_of_bounds(interaction, "minutes", 
+                    MIN_MINUTES, MAX_MINUTES, "time")
+                return    
+            if (seconds_int < MIN_SECONDS) or (seconds_int > MAX_SECONDS):
+                await InputWarnings.out_of_bounds(interaction, "seconds", 
+                    MIN_SECONDS, MAX_SECONDS, "time")
+                return    
+            if (centiseconds_int < MIN_CENTISECONDS) or (centiseconds_int > MAX_CENTISECONDS):
+                await InputWarnings.out_of_bounds(interaction, "centiseconds", 
+                    MIN_CENTISECONDS, MAX_CENTISECONDS, "time")
+                return
+            # ^ time should now be sanitized
+
+            # Now for the machine and lineup checks
+            if machine is not None and not machine.isnumeric():
+                await InputWarnings.machine_not_found(interaction, machine, self._OPTIONS_CACHE["machine_option_list"])
+                return
+            if machine is not None and not any(int(option.get("value")) == int(machine) for option in self._OPTIONS_CACHE["machine_option_list"]) and machine is not None:
+                await InputWarnings.machine_not_found(interaction, machine, self._OPTIONS_CACHE["machine_option_list"])
+                return
+            if lineup is not None and not lineup.isnumeric():
+                await InputWarnings.lineup_not_found(interaction)
+                return
+            if lineup is not None and not any(int(option.get("value")) == int(lineup) for option in self._OPTIONS_CACHE["lineup_option_list"]) and lineup is not None:
+                await InputWarnings.lineup_not_found(interaction)
+                return
+            if self._EVENT_CONFIG_CACHE["is_machine_input_required"] is True and machine is None:
+                await InputWarnings.machine_needed(interaction)
+                return
+            if self._EVENT_CONFIG_CACHE["is_lineup_input_required"] is True and lineup is None:
+                await InputWarnings.lineup_needed(interaction)
+                return
+
+        # Check to ensure that int | None passed in user_data, not str
+            # Process machine info
+            if machine is not None:
+                machine_name = next(
+                    (item["name"] for item in self._OPTIONS_CACHE["machine_option_list"] if item.get("value") == machine), None)
+                machine_id = int(machine)
+            else:
+                machine_name = None
+                machine_id = None
+            
+            # Process lineup info
+            if lineup is not None:
+                lineup_id = int(lineup)
+            else:
+                lineup_id = None
+
+            # Prepare data for database entry
+            result_time = dt.time(hour=0, minute=minutes_int, 
+                second=seconds_int, microsecond=centiseconds_int*10000)
+
+            user_data = [
+                db_user_id,
+                current_event["id"],
+                result_time,
+                current_event["scoring_method"],
+                machine_id,
+                lineup_id,
+            ]
+
+           # Add time to database
+            async with get_db_connection() as db:
+                return_score = await submit_time_sql(db, user_data)  # interaction.user
+            await interaction.response.send_message(
+                f"✅ User {interaction.user} has entered a time of {result_time.strftime("%M:%S:%f")[:-4]} to {current_event['name']} using machine {machine_name}"
+            )  # , ephemeral=True)
+            logger.info(
+                "User %s entered score=%s for event=%s machine=%s",
+                interaction.user,
+                result_time,
+                current_event["name"],
+                machine_name,
+            )
+
+
+        except Exception as error:
+            await interaction.response.send_message(
+                "❌ ERROR! Something went wrong, contact FZD staff for help! ", ephemeral=True
+            )
+            logger.exception("Exception in add_time for user=%s", interaction.user)
+            await send_error_alert(
+                self.bot,
+                where="fzd_add_time",
+                error=error,
+                interaction=interaction,
+            )
+
+
+
     # Bind autocomplete handler to edit and delete commands in cog
     async def cog_load(self):
         self.editScore.autocomplete("old_score")(self.user_scores_autocomplete_nokingmaker)
@@ -633,6 +833,8 @@ class Scoring(commands.Cog):
         self.add_score.autocomplete("lineup")(self.lineup_score_autocomplete)
         self.add_rank.autocomplete("machine")(self.machine_autocomplete)
         self.add_rank.autocomplete("lineup")(self.lineup_score_autocomplete)
+        self.add_time.autocomplete("machine")(self.machine_autocomplete)
+        self.add_time.autocomplete("lineup")(self.lineup_score_autocomplete)
 
 
 async def setup(bot: commands.Bot):
