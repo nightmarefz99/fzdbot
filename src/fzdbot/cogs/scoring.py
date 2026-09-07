@@ -360,10 +360,8 @@ class Scoring(commands.Cog):
 
         if clock - self._OPTIONS_CACHE["last_updated"] < self._ACTIVE_TTL_SECONDS:
             # Do not call database to update event config info
-            print("Used cached values")
             ...
         else:
-            print("Pulled new values")
             active_event, user_id = await self.get_event_config_from_db(interaction.user.name)
             if not active_event:
                 return [app_commands.Choice(name="No active event", value="-1")]
