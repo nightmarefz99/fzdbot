@@ -195,7 +195,7 @@ async def submit_score(db, dataentry) -> int:
     """Executes sql query command to insert data to database
     db = database connection object
     dataentry = [ user_id, scheduled_event_id, score, scoring_method, machine_choice_id ] 
-        - all integers except `scoring_method`, which is a string enum ["points", "rank"]
+        - all integers except `scoring_method`, which is a string enum ["points", "placement"]
     """
     sql_newrow = "sp_insert_score"
     dataentry.append("NULL")  # fifth argument is what will be returned...handled by "fetch" in python
@@ -208,7 +208,7 @@ async def submit_score_sql(db, dataentry) -> int:
         THIS VERSION 1) Uses SQL instead of a stored procedure, and 2) adds the lineup_id if it exists
         db = database connection object
         dataentry = [ user_id, scheduled_event_id, score, scoring_method, machine_choice_id, lineup_id ] 
-            - all integers except `scoring_method`, which is a string enum ["points", "rank"]
+            - all integers except `scoring_method`, which is a string enum ["points", "placement"]
     """
     sql_new_row = """   REPLACE INTO event_result_points
                             (scheduled_event_id, event_lineup_id, user_id, team_id, division_id, machine_id, score)
@@ -252,14 +252,20 @@ async def submit_score_sql(db, dataentry) -> int:
               dataentry[4], dataentry[5], dataentry[1],)
     await execute_query(db, sql_new_row, params=params, fetch=None, isProc=False)
 
-    # Get points given (most relevant in "rank" situations)
-    sql_get_points =    """ SELECT points + bonus_points AS points
-                            FROM kingmaker_points kp
-                            WHERE placement = %s;
-                        """
-    params = (dataentry[2],)
-    points = await execute_query(db, sql_get_points, params=params, fetch="one", isProc=False)
-    return points["points"]
+    match dataentry[3]:
+        case "points":
+            return dataentry[2]
+        case "placement":
+            # Get points given in rank
+            sql_get_points =    """ SELECT points + bonus_points AS points
+                                    FROM kingmaker_points kp
+                                    WHERE placement = %s;
+                                """
+            params = (dataentry[2],)
+            points = await execute_query(db, sql_get_points, params=params, fetch="one", isProc=False)
+            return points["points"]
+        case _:
+            raise ValueError(f"Only 'points' and 'placement' type scores can be entered this way, not {dataentry[3]}")
 
 
 async def submit_time_sql(db, dataentry) -> int:
@@ -267,7 +273,7 @@ async def submit_time_sql(db, dataentry) -> int:
         THIS VERSION 1) Uses SQL instead of a stored procedure, and 2) adds the lineup_id if it exists
         db = database connection object
         dataentry = [ user_id, scheduled_event_id, time, scoring_method, machine_choice_id, lineup_id ] 
-            - all integers except `scoring_method`, which is a string enum ["points", "rank", "time"]
+            - all integers except `scoring_method`, which is a string enum ["points", "placement", "time"]
     """
     sql_new_row = """   REPLACE INTO event_result_points
                             (scheduled_event_id, event_lineup_id, user_id, team_id, division_id, machine_id, time)
@@ -1248,12 +1254,12 @@ async def get_machine_config_db(db, scheduled_event_id: int) -> dict | None:
 
 
 async def get_event_lineups_and_scores(db, scheduled_event_id: int, 
-    scoring_method: Literal["points","rank","time"], user_id: int) -> list[dict]:
+    scoring_method: Literal["points","placement","time"], user_id: int) -> list[dict]:
     """ Gets lineups and scores, or times, based on input parameter scoring_method.
         Note that output of time is of type timedelta.
     """
     match scoring_method:
-        case "points" | "rank":
+        case "points" | "placement":
             sql_lineup_and_score =  """ SELECT el.id AS event_lineup_id,
                                             el.lineup_num AS lineup_num,
                                             l.name AS lineup_name,
@@ -1280,7 +1286,7 @@ async def get_event_lineups_and_scores(db, scheduled_event_id: int,
                                             AND ep.user_id = %s
                                     """
         case _:
-            raise ValueError(f"Scoring method must be 'points', 'rank', or 'time, not {scoring_method}.")
+            raise ValueError(f"Scoring method must be 'points', 'placement', or 'time, not {scoring_method}.")
 
     params = (scheduled_event_id, scheduled_event_id, user_id,)
     lineup_score_dict = await execute_query(db, sql_lineup_and_score, params=params, fetch="all", isProc=False)
@@ -1326,3 +1332,5 @@ async def get_event_config_flags(db, scheduled_event_id: int) -> dict:
             flag_dict["is_registration_event"] = int.from_bytes(raw_machine_flag, byteorder="big") == 1
         else:
             flag_dict["is_registration_event"] = bool(raw_machine_flag)
+        
+        return flag_dict
